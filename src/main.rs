@@ -1,3 +1,5 @@
+use std::process::ChildStdout;
+use std::sync::{Arc, Mutex};
 use std::thread;
 use websocket::sync::Server;
 use websocket::OwnedMessage;
@@ -52,29 +54,39 @@ fn main() {
 		fullargs += &s;
 		fullargs += &String::from(" ");
 	}
-	
-	return;
+
+	let mut databuf : Vec<Vec<u8>> = Vec::new();
+
+    let mut pio = Pio::new();
+
+    pio.set(subprocess, fullargs);
+    pio.run();
+
+	let databuf_lock_sub = Arc::new(Mutex::new(databuf));
+	let pio_lock_sub = Arc::new(Mutex::new(pio));
+	let pio_lock = Arc::clone(&pio_lock_sub);
+	let databuf_lock = databuf_lock_sub.clone();
+
+	thread::spawn(move || {
+		let mut buf : [u8;1024] = [0;1024];
+		loop {
+			let mut _pio = pio_lock.lock().unwrap();
+			let result = _pio.read(buf.as_mut());
+			buf.fill(0);
+		}
+	});
 
     let listen_addr = format!("{}:{}", "0.0.0.0", port);
 
 	let server = Server::bind(listen_addr).expect("listen websocket faild");
 
 	for request in server.filter_map(Result::ok) {
-		// Spawn a new thread for each connection.
-		thread::spawn(|| {
-			if !request.protocols().contains(&"rust-websocket".to_string()) {
-				request.reject().unwrap();
-				return;
-			}
 
-			let mut client = request.use_protocol("rust-websocket").accept().unwrap();
+		let pio_lock = Arc::clone(&pio_lock_sub);
 
-			let ip = client.peer_addr().unwrap();
+		thread::spawn( move || {
 
-			println!("Connection from {}", ip);
-
-			let message = OwnedMessage::Text("Hello".to_string());
-			client.send_message(&message).unwrap();
+			let mut client = request.accept().unwrap();
 
 			let (mut receiver, mut sender) = client.split().unwrap();
 
@@ -84,13 +96,15 @@ fn main() {
 				match message {
 					OwnedMessage::Close(_) => {
 						let message = OwnedMessage::Close(None);
-						sender.send_message(&message).unwrap();
-						println!("Client {} disconnected", ip);
 						return;
 					}
 					OwnedMessage::Ping(ping) => {
 						let message = OwnedMessage::Pong(ping);
 						sender.send_message(&message).unwrap();
+					}
+					OwnedMessage::Text(text) => {
+						let mut _pio = pio_lock.lock().unwrap();
+						_pio.write(text.as_bytes());
 					}
 					_ => sender.send_message(&message).unwrap(),
 				}

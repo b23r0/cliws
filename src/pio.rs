@@ -1,5 +1,5 @@
-use std::process::{Child, Command, Stdio};
-use std::io::{Read, Write ,Error};
+use std::process::{Child, Command , ChildStdout, Stdio };
+use std::io::{Error, Read, Write};
 
 pub struct Pio {
     command: String,
@@ -48,6 +48,7 @@ impl Pio {
         let b = a.stdin.as_ref();
         b.unwrap().write_all(buf);
     }
+
     pub fn read(&mut self ,  buf:& mut[u8]) -> Result<usize , Error> {
         let a = self.child.as_mut().expect("get subprocess fd faild");
         let mut b = a.stdout.as_mut();
