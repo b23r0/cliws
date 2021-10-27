@@ -8,21 +8,39 @@ pub struct Pio {
 }
 
 impl Pio {
-    pub fn new(process_name : String , args : String) -> Pio {
+    pub fn new() -> Pio {
         Pio {
-            command: process_name,
-            args : args,
+            command: String::from(""),
+            args : String::from(""),
             child : None
         }
     }
 
+    pub fn set(& mut self, process_name : String , args : String) {
+        self.command = process_name;
+        self.args = args;
+    }
+
     pub fn run(&mut self) {
-        let mut child = Command::new(self.command.as_str()).arg(self.args.as_str())
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .spawn()
-        .expect("failed to execute child");
-        self.child = Some(child);
+        let cmd = &mut Command::new(self.command.as_str());
+
+        if self.command == "" {
+            panic!("command is empty")
+        }
+
+        if self.args == ""{
+            self.child = Some(cmd.stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .expect("failed to execute child"));
+            
+        }
+        else {
+            self.child = Some(cmd.stdin(Stdio::piped()).arg(self.args.as_str())
+            .stdout(Stdio::piped())
+            .spawn()
+            .expect("failed to execute child"));
+        }
     }
 
     pub fn write(&mut self , buf: &[u8]) {
