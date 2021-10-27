@@ -1,10 +1,10 @@
-use std::str::FromStr;
 use std::thread;
 use websocket::sync::Server;
 use websocket::OwnedMessage;
 
 mod pio;
 use pio::Pio;
+
 fn help () {
     println!("Cliws - Run a process and forwarding stdio to websocket");
     println!("https://github.com/b23r0/Cliws");
@@ -19,41 +19,45 @@ fn main() {
         return;
     }
 
-    let mut subprocess  = std::env::args().nth(1).expect("parameter not enough");
+    let mut subprocess  = std::env::args().nth(1)
+								.expect("parameter not enough");
+
     let mut port = "8000" . to_string();
 
 	let mut set_port_flag = false;
 
     if subprocess == "-p" {
-        port = std::env::args().nth(2).expect("parameter not enough");
+
+        port = std::env::args().nth(2)
+						.expect("parameter not enough");
 		set_port_flag = true;
     }
 
 	let mut _start = 2;
 
 	if set_port_flag {
-		subprocess = std::env::args().nth(3).expect("parameter not enough");
+		
+		subprocess = std::env::args().nth(3)
+							.expect("parameter not enough");
+
 		_start = 4;
 	}
 
 	let mut fullargs = String::from("");
 	for i in _start..arg_count {
-		let s = std::env::args().nth(i).expect("parse parameter faild");
+
+		let s = std::env::args().nth(i)
+							.expect("parse parameter faild");
+
 		fullargs += &s;
 		fullargs += &String::from(" ");
 	}
-
-	let mut pio = Pio::new(subprocess , fullargs);
-    let mut buf : [u8;1024] = [0;1024];
-	pio.run();
-    let result = pio.read(buf.as_mut());
-	print!("{}" , std::str::from_utf8(&buf).unwrap());
-
+	
 	return;
 
     let listen_addr = format!("{}:{}", "0.0.0.0", port);
 
-	let server = Server::bind(listen_addr).unwrap();
+	let server = Server::bind(listen_addr).expect("listen websocket faild");
 
 	for request in server.filter_map(Result::ok) {
 		// Spawn a new thread for each connection.
