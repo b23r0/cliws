@@ -1,11 +1,9 @@
-use std::process::ChildStdout;
+use std::io::{Read, Write};
+use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use websocket::sync::Server;
+use websocket::sync::{Server, Writer};
 use websocket::OwnedMessage;
-
-mod pio;
-use pio::Pio;
 
 fn help () {
     println!("Cliws - Run a process and forwarding stdio to websocket");
@@ -21,8 +19,7 @@ fn main() {
         return;
     }
 
-    let mut subprocess  = std::env::args().nth(1)
-								.expect("parameter not enough");
+    let mut subprocess  = std::env::args().nth(1).expect("parameter not enough");
 
     let mut port = "8000" . to_string();
 
@@ -30,8 +27,7 @@ fn main() {
 
     if subprocess == "-p" {
 
-        port = std::env::args().nth(2)
-						.expect("parameter not enough");
+        port = std::env::args().nth(2).expect("parameter not enough");
 		set_port_flag = true;
     }
 
@@ -39,8 +35,7 @@ fn main() {
 
 	if set_port_flag {
 		
-		subprocess = std::env::args().nth(3)
-							.expect("parameter not enough");
+		subprocess = std::env::args().nth(3).expect("parameter not enough");
 
 		_start = 4;
 	}
@@ -48,65 +43,84 @@ fn main() {
 	let mut fullargs = String::from("");
 	for i in _start..arg_count {
 
-		let s = std::env::args().nth(i)
-							.expect("parse parameter faild");
+		let s = std::env::args().nth(i).expect("parse parameter faild");
 
 		fullargs += &s;
 		fullargs += &String::from(" ");
 	}
 
-	let mut databuf : Vec<Vec<u8>> = Vec::new();
+    let mut cmd = Command::new(subprocess)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("!commnad::new");
 
-    let mut pio = Pio::new();
+    let out = Arc::new(Mutex::new(cmd.stdout.take().expect("!stdout")));
+    let writer = Arc::new(Mutex::new(cmd.stdin.take().expect("!stdin")));
 
-    pio.set(subprocess, fullargs);
-    pio.run();
+	let out_lock = out.clone();
 
-	let databuf_lock_sub = Arc::new(Mutex::new(databuf));
-	let pio_lock_sub = Arc::new(Mutex::new(pio));
-	let pio_lock = Arc::clone(&pio_lock_sub);
-	let databuf_lock = databuf_lock_sub.clone();
+	let mut senders : Vec<Arc<Mutex<Writer<std::net::TcpStream>>>> = Vec::new();
 
+	let senders_lcks = Arc::new(Mutex::new(senders));
+	let send_lck = senders_lcks.clone();
 	thread::spawn(move || {
+
 		let mut buf : [u8;1024] = [0;1024];
 		loop {
-			let mut _pio = pio_lock.lock().unwrap();
-			let result = _pio.read(buf.as_mut());
+			let mut out = out_lock.lock().unwrap();
+			let result = out.read(buf.as_mut());
+			let sendmsg = String::from_utf8(buf[..result.unwrap()].to_vec()).unwrap();
+			print!("{}" ,sendmsg);
+
+			for i in send_lck.lock().unwrap().iter_mut(){
+				let msg = OwnedMessage::Text(sendmsg.clone());
+				i.lock().unwrap().send_message(&msg);
+			}
 			buf.fill(0);
 		}
+
 	});
 
     let listen_addr = format!("{}:{}", "0.0.0.0", port);
 
-	let server = Server::bind(listen_addr).expect("listen websocket faild");
+	let server = Server::bind(listen_addr).expect("!listen");
 
 	for request in server.filter_map(Result::ok) {
 
-		let pio_lock = Arc::clone(&pio_lock_sub);
-
+		let writer_lock = writer.clone();
+		let send_lck = senders_lcks.clone();
 		thread::spawn( move || {
 
 			let mut client = request.accept().unwrap();
 
 			let (mut receiver, mut sender) = client.split().unwrap();
-
+			let slck = Arc::new(Mutex::new(sender));
+			{
+				let mut s = send_lck.lock().unwrap();
+				s.push(slck.clone());
+			}
+			
 			for message in receiver.incoming_messages() {
 				let message = message.unwrap();
-
+				
 				match message {
 					OwnedMessage::Close(_) => {
+						// here need remove sender in vec
 						let message = OwnedMessage::Close(None);
 						return;
 					}
 					OwnedMessage::Ping(ping) => {
 						let message = OwnedMessage::Pong(ping);
-						sender.send_message(&message).unwrap();
+						slck.lock().unwrap().send_message(&message).unwrap();
 					}
 					OwnedMessage::Text(text) => {
-						let mut _pio = pio_lock.lock().unwrap();
-						_pio.write(text.as_bytes());
+						let mut writer = writer_lock.lock().unwrap();
+						writer.write_all(text.as_bytes());
+						writer.write_all("\n".as_bytes());
 					}
-					_ => sender.send_message(&message).unwrap(),
+					_ => slck.lock().unwrap().send_message(&message).unwrap(),
 				}
 			}
 		});
