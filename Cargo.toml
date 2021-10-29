@@ -8,3 +8,4 @@ edition = "2018"
 
 [dependencies]
 websocket = "0.26.2"
+sl-console = { git = "https://github.com/sl-sh-dev/sl-console.git" }
