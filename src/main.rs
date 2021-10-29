@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
@@ -57,7 +58,8 @@ fn main() {
 
 	let stdout_lck = out.clone();
 
-	let senders : Vec<Arc<Mutex<Writer<std::net::TcpStream>>>> = Vec::new();
+	// key == source port , value == websocket locker
+	let senders : HashMap<u16 , Arc<Mutex<Writer<std::net::TcpStream>>>> = HashMap::new();
 
 	let senders_lcks = Arc::new(Mutex::new(senders));
 	let send_lck = senders_lcks.clone();
@@ -72,7 +74,7 @@ fn main() {
 
 			for i in send_lck.lock().unwrap().iter_mut(){
 				let msg = OwnedMessage::Text(sendmsg.clone());
-				i.lock().unwrap().send_message(&msg).unwrap();
+				i.1.lock().unwrap().send_message(&msg).unwrap();
 			}
 			buf.fill(0);
 		}
@@ -91,11 +93,15 @@ fn main() {
 
 			let client = request.accept().unwrap();
 
+			let mut port = 0;
+			port = client.peer_addr().unwrap().port();
+
 			let (mut receiver, sender) = client.split().unwrap();
 			let slck = Arc::new(Mutex::new(sender));
+
 			{
 				let mut s = send_lck.lock().unwrap();
-				s.push(slck.clone());
+				s.insert(port , slck.clone());
 			}
 			
 			for message in receiver.incoming_messages() {
@@ -103,9 +109,10 @@ fn main() {
 				
 				match message {
 					OwnedMessage::Close(_) => {
-						// here need remove sender in vec
-						let message = OwnedMessage::Close(None);
-						slck.lock().unwrap().send_message(&message).unwrap();
+						// here need remove sender in map
+						//let message = OwnedMessage::Close(None);
+						//slck.lock().unwrap().send_message(&message).unwrap();
+						send_lck.lock().unwrap().remove(&port);
 						return;
 					}
 					OwnedMessage::Ping(ping) => {
