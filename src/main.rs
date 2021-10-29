@@ -54,9 +54,11 @@ fn main() {
 		.expect("!commnad::new");
 
 	let out = Arc::new(Mutex::new(cmd.stdout.take().expect("!stdout")));
+	let err = Arc::new(Mutex::new(cmd.stderr.take().expect("!stdout")));
 	let writer = Arc::new(Mutex::new(cmd.stdin.take().expect("!stdin")));
 
 	let stdout_lck = out.clone();
+	let stderr_lck = err.clone();
 
 	// key == source port , value == websocket locker
 	let senders : HashMap<u16 , Arc<Mutex<Writer<std::net::TcpStream>>>> = HashMap::new();
@@ -69,6 +71,25 @@ fn main() {
 		loop {
 			let mut out = stdout_lck.lock().unwrap();
 			let result = out.read(buf.as_mut());
+			let sendmsg = String::from_utf8(buf[..result.unwrap()].to_vec()).unwrap();
+			print!("{}" ,sendmsg);
+
+			for i in send_lck.lock().unwrap().iter_mut(){
+				let msg = OwnedMessage::Text(sendmsg.clone());
+				i.1.lock().unwrap().send_message(&msg).unwrap();
+			}
+			buf.fill(0);
+		}
+
+	});
+
+	let send_lck = senders_lcks.clone();
+	thread::spawn(move || {
+
+		let mut buf : [u8;1024] = [0;1024];
+		loop {
+			let mut err = stderr_lck.lock().unwrap();
+			let result = err.read(buf.as_mut());
 			let sendmsg = String::from_utf8(buf[..result.unwrap()].to_vec()).unwrap();
 			print!("{}" ,sendmsg);
 
