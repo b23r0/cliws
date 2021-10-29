@@ -1,9 +1,15 @@
 use std::collections::HashMap;
-use std::io::{self, Read, Write};
+use std::fs::File;
+use std::io::{self, BufReader, LineWriter, Read, Write};
+use std::os::unix::prelude::FromRawFd;
 use std::process::{Child, Command, Stdio, exit};
+use std::ptr::read;
+use nix::pty::openpty;
 use std::sync::mpsc::channel;
 use std::sync::{Arc, Mutex};
 use std::{thread};
+use signal_hook::consts::SIGINT;
+use signal_hook::iterator::Signals;
 use sl_console::{con_init, conin, conout};
 use websocket::sync::{Server, Writer};
 use websocket::{ClientBuilder, OwnedMessage};
@@ -22,7 +28,9 @@ fn read_line() -> io::Result<Option<String>> {
     for c in conin().bytes() {
         match c {
             Err(e) => return Err(e),
-            Ok(0) | Ok(3) | Ok(4) => return Ok(None),
+            Ok(0) | Ok(3) | Ok(4) => {
+				println!("press ctrl+x");
+			},
             Ok(0x7f) => {
                 buf.pop();
             }
@@ -54,6 +62,14 @@ fn connect( addr : String ){
 	let (tx, rx) = channel();
 
 	let tx_1 = tx.clone();
+
+    let mut signals = Signals::new(&[SIGINT]).unwrap();
+
+    thread::spawn(move || {
+        for sig in signals.forever() {
+            println!("Received signal {:?}", sig);
+        }
+    });
 
 	let send_loop = thread::spawn(move || {
 		loop {
@@ -133,6 +149,7 @@ fn connect( addr : String ){
 }
 
 fn main() {
+
 	let arg_count = std::env::args().count();
 
 	if  arg_count == 1{
@@ -175,44 +192,46 @@ fn main() {
 
 	let mut cmd : Child;
 
-	if fullargs.len() ==  0 {
-		cmd = Command::new(subprocess)
-		.stdin(Stdio::piped())
-		.stdout(Stdio::piped())
-		.stderr(Stdio::piped())
-		.spawn()
-		.expect("!commnad::new");
-	} else {
-		cmd = Command::new(subprocess).args(fullargs)
-		.stdin(Stdio::piped())
-		.stdout(Stdio::piped())
-		.stderr(Stdio::piped())
-		.spawn()
-		.expect("!commnad::new");
-	}
+    let ends = openpty(None, None).expect("openpty failed");
+    let master = ends.master;
+    let slave = ends.slave;
 
+	let mut builder = Command::new(subprocess);
 
+	if fullargs.len() !=  0 {
+		builder.args(fullargs);
+	} 
 
-	let out = Arc::new(Mutex::new(cmd.stdout.take().expect("!stdout")));
-	let err = Arc::new(Mutex::new(cmd.stderr.take().expect("!stdout")));
-	let writer = Arc::new(Mutex::new(cmd.stdin.take().expect("!stdin")));
+	cmd = builder
+	.stdin(unsafe { Stdio::from_raw_fd(slave) })
+	.stdout(unsafe { Stdio::from_raw_fd(slave) })
+	.stderr(unsafe { Stdio::from_raw_fd(slave) })
+	.spawn()
+	.expect("!commnad::new");
 
-	let stdout_lck = out.clone();
-	let stderr_lck = err.clone();
+	let ptyin = unsafe { File::from_raw_fd(master) };
+	let ptyout = unsafe { File::from_raw_fd(master) };
+	
+	let rc_writer = Arc::new(Mutex::new(ptyin));
+	let rc_reader = Arc::new(Mutex::new(ptyout));
 
 	// key == source port , value == websocket locker
 	let senders : HashMap<u16 , Arc<Mutex<Writer<std::net::TcpStream>>>> = HashMap::new();
 
 	let senders_lcks = Arc::new(Mutex::new(senders));
 	let send_lck = senders_lcks.clone();
+	let reader_lck = rc_reader.clone();
 	thread::spawn(move || {
 
 		let mut buf : [u8;1024] = [0;1024];
 		loop {
-			let mut out = stdout_lck.lock().unwrap();
-			let result = out.read(buf.as_mut());
+			let mut out = reader_lck.lock().unwrap();
 
-			let size = result.unwrap();
+			let mut size = 0;
+
+			let result = out.read(buf.as_mut());
+			size = result.unwrap();	
+			
 
 			//child process exit
 			if size == 0{
@@ -235,44 +254,13 @@ fn main() {
 
 	});
 
-	let send_lck = senders_lcks.clone();
-	thread::spawn(move || {
-
-		let mut buf : [u8;1024] = [0;1024];
-		loop {
-			let mut err = stderr_lck.lock().unwrap();
-			let result = err.read(buf.as_mut());
-			let size = result.unwrap();
-
-			//child process exit
-			if size == 0{
-				exit(0);
-			}
-			//let sendmsg = String::from_utf8(buf[..size].to_vec()).unwrap();
-			//print!("{}" ,sendmsg);
-
-			let mut map = send_lck.lock().unwrap();
-			for i in map.iter_mut(){
-				let msg = OwnedMessage::Binary(buf[..size].to_vec());
-				match i.1.lock().unwrap().send_message(&msg){
-					Ok(p) => p ,
-					Err(e) => {
-						println!("{}",e);
-					}
-				};
-			}
-			buf.fill(0);
-		}
-
-	});
-
 	let listen_addr = format!("{}:{}", "0.0.0.0", port);
 
 	let server = Server::bind(listen_addr).expect("!listen");
 
 	for request in server.filter_map(Result::ok) {
 
-		let writer_lck = writer.clone();
+		let writer_lck = rc_writer.clone();
 		let send_lck = senders_lcks.clone();
 		thread::spawn( move || {
 
