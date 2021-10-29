@@ -19,32 +19,32 @@ fn help () {
 	println!("https://github.com/b23r0/Cliws");
 	println!("Usage: cliws [-p listenport] [-c wsaddress] [command]");
 	println!("Example: cliws -p 8000 ping 127.0.0.1");
-	println!("         cliws -c ws://127.0.0.1:8000");
+	println!("		 cliws -c ws://127.0.0.1:8000");
 }
 
 fn read_line() -> io::Result<Option<String>> {
-    let mut buf = Vec::with_capacity(30);
+	let mut buf = Vec::with_capacity(30);
 
-    for c in conin().bytes() {
-        match c {
-            Err(e) => return Err(e),
-            Ok(0) | Ok(3) | Ok(4) => {
+	for c in conin().bytes() {
+		match c {
+			Err(e) => return Err(e),
+			Ok(0) | Ok(3) | Ok(4) => {
 				println!("press ctrl+x");
 			},
-            Ok(0x7f) => {
-                buf.pop();
-            }
-            Ok(b'\n') | Ok(b'\r') =>{ 
+			Ok(0x7f) => {
+				buf.pop();
+			}
+			Ok(b'\n') | Ok(b'\r') =>{ 
 				buf.push(b'\n');
 				break;
 			},
-            Ok(c) => buf.push(c),
-        }
-    }
+			Ok(c) => buf.push(c),
+		}
+	}
 
-    let string =
-        String::from_utf8(buf).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-    Ok(Some(string))
+	let string =
+		String::from_utf8(buf).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+	Ok(Some(string))
 }
 
 fn connect( addr : String ){
@@ -63,13 +63,13 @@ fn connect( addr : String ){
 
 	let tx_1 = tx.clone();
 
-    let mut signals = Signals::new(&[SIGINT]).unwrap();
+	let mut signals = Signals::new(&[SIGINT]).unwrap();
 
-    thread::spawn(move || {
-        for sig in signals.forever() {
-            println!("Received signal {:?}", sig);
-        }
-    });
+	thread::spawn(move || {
+		for sig in signals.forever() {
+			println!("Received signal {:?}", sig);
+		}
+	});
 
 	let send_loop = thread::spawn(move || {
 		loop {
@@ -123,7 +123,7 @@ fn connect( addr : String ){
 				OwnedMessage::Binary(message) => {
 					conout.write_all(message.as_slice()).unwrap();
 				},
-    			OwnedMessage::Pong(_) => {
+				OwnedMessage::Pong(_) => {
 					//let _ = tx_1.send(OwnedMessage::Ping([0].to_vec()));
 				},
 			}
@@ -192,9 +192,9 @@ fn main() {
 
 	let mut cmd : Child;
 
-    let ends = openpty(None, None).expect("openpty failed");
-    let master = ends.master;
-    let slave = ends.slave;
+ 	let ends = openpty(None, None).expect("openpty failed");
+	let master = ends.master;
+	let slave = ends.slave;
 
 	let mut builder = Command::new(subprocess);
 
