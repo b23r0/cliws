@@ -10,4 +10,4 @@ edition = "2018"
 websocket = "0.26.2"
 signal-hook = "0.3.10"
 nix = "0.23.0"
-sl-console = { git = "https://github.com/sl-sh-dev/sl-console.git" }
+atty = "0.2"
