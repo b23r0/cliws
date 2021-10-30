@@ -1,5 +1,5 @@
 # Cliws [![Build Status](https://app.travis-ci.com/b23r0/Cliws.svg?branch=main)](https://app.travis-ci.com/b23r0/Cliws)
-Spawn process bind IO to websocket and support full PTY.
+Spawn process IO to websocket and support full PTY.
 
 # Features
 
