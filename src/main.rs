@@ -37,6 +37,8 @@ fn connect( addr : String ){
 
 	let bakflag = termios::tcgetattr(STDOUT_FILENO).unwrap();
 
+	log::info!("connect to : [{}]" ,addr );
+
 	let client = ClientBuilder::new(addr.as_str())
 	.unwrap()
 	.connect_insecure()
@@ -146,7 +148,7 @@ fn connect( addr : String ){
 		termios::tcsetattr(STDIN_FILENO, termios::SetArg::TCSANOW, &flags).unwrap();
 	}
 
-
+	log::info!("first set terminal size");
 	// first set terminal size
 	let size = get_termsize(0).unwrap();
 	let vec = [MAGIC_FLAG[0], MAGIC_FLAG[1] , size.ws_row as u8 , size.ws_col as u8 ];
@@ -227,13 +229,13 @@ fn main() {
 	let master = ends.master;
 	let slave = ends.slave;
 
-	let mut builder = Command::new(subprocess);
+	let mut builder = Command::new(subprocess.clone());
 
 	if fullargs.len() !=  0 {
 		builder.args(fullargs);
 	} 
 
-
+	log::info!("start process: [{}]" ,subprocess );
 	match unsafe { fork() } {
 		Ok(ForkResult::Parent { child: pid, .. }) => {
 			thread::spawn(move || {
@@ -302,7 +304,7 @@ fn main() {
 
 	});
 
-	log::info!("websocket server listen : [{}:{}]" ,"0.0.0.0" , port );
+	log::info!("listen to: [{}:{}]" ,"0.0.0.0" , port );
 	let listen_addr = format!("{}:{}", "0.0.0.0", port);
 
 	let server = Server::bind(listen_addr).expect("!listen");
