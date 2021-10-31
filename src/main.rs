@@ -3,7 +3,7 @@ mod utils;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{Read, Write};
-use std::os::unix::prelude::{FromRawFd};
+use std::os::unix::prelude::{CommandExt, FromRawFd};
 use std::process::{Command, Stdio};
 use nix::libc::{self, STDIN_FILENO, STDOUT_FILENO};
 use nix::pty::openpty;
@@ -16,6 +16,8 @@ use websocket::{ClientBuilder, OwnedMessage};
 use atty::Stream;
 use signal_hook::consts::SIGWINCH;
 use signal_hook::iterator::Signals;
+use ioctl_rs;
+use nix::unistd::{fork, ForkResult};
 
 use utils::{get_termsize , set_termsize};
 
@@ -30,6 +32,8 @@ fn help () {
 }
 
 fn connect( addr : String ){
+
+	let bakflag = termios::tcgetattr(STDOUT_FILENO).unwrap();
 
 	let client = ClientBuilder::new(addr.as_str())
 	.unwrap()
@@ -52,6 +56,7 @@ fn connect( addr : String ){
 			};
 			match message {
 				OwnedMessage::Close(_) => {
+					termios::tcsetattr(STDIN_FILENO, termios::SetArg::TCSANOW, &bakflag).unwrap();
 					std::process::exit(0);
 				},
 				OwnedMessage::Binary(_) => {
@@ -110,7 +115,7 @@ fn connect( addr : String ){
 
 			if sig == SIGWINCH {
 
-				let size = get_termsize().unwrap();
+				let size = get_termsize(0).unwrap();
 
 				let vec = [MAGIC_FLAG[0], MAGIC_FLAG[1] , size.ws_row as u8 , size.ws_col as u8 ];
 
@@ -127,7 +132,7 @@ fn connect( addr : String ){
 
 	if atty::is(Stream::Stdin) {
 
-		let mut flags = termios::tcgetattr(STDOUT_FILENO).unwrap();
+		let mut flags = termios::tcgetattr(STDIN_FILENO).unwrap();
 
 		flags.input_flags |= termios::InputFlags::IGNPAR;
 		flags.input_flags &= !{termios::InputFlags::ISTRIP|termios::InputFlags::INLCR|termios::InputFlags::IGNCR|termios::InputFlags::ICRNL|termios::InputFlags::IXON|termios::InputFlags::IXANY|termios::InputFlags::IXOFF};
@@ -141,7 +146,7 @@ fn connect( addr : String ){
 
 
 	// first set terminal size
-	let size = get_termsize().unwrap();
+	let size = get_termsize(0).unwrap();
 	let vec = [MAGIC_FLAG[0], MAGIC_FLAG[1] , size.ws_row as u8 , size.ws_col as u8 ];
 	let msg = OwnedMessage::Binary(vec.to_vec());
 	tx.send(msg).unwrap();
@@ -223,51 +228,54 @@ fn main() {
 		builder.args(fullargs);
 	} 
 
-	builder
-	.stdin(unsafe { Stdio::from_raw_fd(slave) })
-	.stdout(unsafe { Stdio::from_raw_fd(slave) })
-	.stderr(unsafe { Stdio::from_raw_fd(slave) })
-	.spawn()
-	.expect("!commnad::new");
+
+	match unsafe { fork() } {
+		Ok(ForkResult::Parent { child: _, .. }) => {
+			
+		}
+		Ok(ForkResult::Child) => {
+			unsafe { ioctl_rs::ioctl(master, ioctl_rs::TIOCNOTTY) };
+			unsafe { libc::setsid() };
+			unsafe { ioctl_rs::ioctl(slave, ioctl_rs::TIOCSCTTY) };
+
+			builder
+			.stdin(unsafe { Stdio::from_raw_fd(slave) })
+			.stdout(unsafe { Stdio::from_raw_fd(slave) })
+			.stderr(unsafe { Stdio::from_raw_fd(slave) })
+			.exec();
+			return;
+		},
+		Err(_) => println!("Fork failed"),
+	}
 
 	let ptyin = unsafe { File::from_raw_fd(master) };
-	let ptyout = unsafe { File::from_raw_fd(master) };
+	let mut ptyout = unsafe { File::from_raw_fd(master) };
 	
 	let rc_writer = Arc::new(Mutex::new(ptyin));
-	let rc_reader = Arc::new(Mutex::new(ptyout));
 
 	let history : Vec<u8> = Vec::new();
 	let history_lcks = Arc::new(Mutex::new(history)); 
 
-	// key == source port , value == websocket locker
 	let senders : HashMap<u16 , Arc<Mutex<Writer<std::net::TcpStream>>>> = HashMap::new();
 
 	let senders_lcks = Arc::new(Mutex::new(senders));
 	let send_lck = senders_lcks.clone();
-	let reader_lck = rc_reader.clone();
 	
 	let history_lock = history_lcks.clone();
 	thread::spawn(move || {
 
 		let mut buf : [u8;1024] = [0;1024];
 		loop {
-			let mut out = reader_lck.lock().unwrap();
 
-			let result = out.read(buf.as_mut());
+			let result = ptyout.read(buf.as_mut());
 			let size = result.unwrap();	
 
-			//child process exit
 			if size == 0{
 				std::process::exit(0);
 			}
 
-			{
-				history_lock.lock().unwrap().append(buf[..size].to_vec().as_mut());
-			}
+			{ history_lock.lock().unwrap().append(buf[..size].to_vec().as_mut()); }
 			
-
-			//let sendmsg = String::from_utf8(buf[..result.unwrap()].to_vec()).unwrap();
-			//print!("{}" ,sendmsg);
 			let mut map = send_lck.lock().unwrap();
 			for i in map.iter_mut(){
 				let msg = OwnedMessage::Binary(buf[..size].to_vec());
@@ -324,9 +332,6 @@ fn main() {
 				
 				match message {
 					OwnedMessage::Close(_) => {
-						// here need remove sender in map
-						//let message = OwnedMessage::Close(None);
-						//slck.lock().unwrap().send_message(&message).unwrap();
 						send_lck.lock().unwrap().remove(&port);
 						return;
 					},
@@ -340,19 +345,6 @@ fn main() {
 						
 					},
 					OwnedMessage::Binary(data) => {
-						/*                    
-							if(winch->flag[0]==magickey[0] && winch->flag[1]==magickey[1] 
-								&& winch->flag[2]=='s' && winch->flag[3]=='s'){
-								ws.ws_row = winch->ws_row;
-								ws.ws_col = winch->ws_col;
-								ws.ws_xpixel = 0;
-								ws.ws_ypixel = 0;
-								debuglog("Got new win size:%d,%d",ws.ws_row,ws.ws_col);
-								ioctl( pty, TIOCSWINSZ, &ws );
-							} 
-						*/
-						// set window size
-
 
 						if data.len() == 4{
 
@@ -366,7 +358,7 @@ fn main() {
 									
 								});
 								
-								if set_termsize(size) {
+								if set_termsize(slave , size) {
 									std::process::exit(0);
 								}
 

@@ -1,7 +1,7 @@
 use atty::Stream;
 use nix::libc;
 
-pub fn get_termsize() -> Option<Box<libc::winsize>> {
+pub fn get_termsize(fd : i32) -> Option<Box<libc::winsize>> {
 	let mut ret = 0;
 	let mut size = Box::new(libc::winsize{
 		ws_row : 25 , 
@@ -12,7 +12,7 @@ pub fn get_termsize() -> Option<Box<libc::winsize>> {
 	});
 
 	if atty::is(Stream::Stdin){
-		ret = unsafe {libc::ioctl(0 , libc::TIOCGWINSZ , &mut *size) } as i32;
+		ret = unsafe {libc::ioctl(fd , libc::TIOCGWINSZ , &mut *size) } as i32;
 	} else {
 		size.ws_row = 25;
 		size.ws_col = 80;
@@ -25,6 +25,6 @@ pub fn get_termsize() -> Option<Box<libc::winsize>> {
 	Some(size)
 }
 
-pub fn set_termsize(mut size : Box<libc::winsize>) -> bool {
-	(unsafe {libc::ioctl(0 , libc::TIOCSWINSZ , &mut *size) } as i32) > 0
+pub fn set_termsize(fd : i32 , mut size : Box<libc::winsize>) -> bool {
+	(unsafe {libc::ioctl(fd , libc::TIOCSWINSZ , &mut *size) } as i32) > 0
 }

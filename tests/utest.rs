@@ -1,7 +1,7 @@
 include!("../src/utils.rs");
 #[test]
 fn test_get_termsize() {
-    let a = get_termsize().unwrap();
+    let a = get_termsize(0).unwrap();
     assert!(a.ws_row != 0);
     assert!(a.ws_col != 0);
 }
@@ -14,5 +14,5 @@ fn test_set_termsize() {
         ws_ypixel: 0, 
         
     });
-    set_termsize(size);
+    set_termsize(0 ,size);
 }
