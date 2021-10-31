@@ -1,9 +1,11 @@
+mod utils;
+
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{Read, Write};
-use std::os::unix::prelude::FromRawFd;
+use std::os::unix::prelude::{FromRawFd};
 use std::process::{Command, Stdio};
-use nix::libc::{STDIN_FILENO,STDOUT_FILENO};
+use nix::libc::{self, STDIN_FILENO, STDOUT_FILENO};
 use nix::pty::openpty;
 use nix::sys::{termios};
 use std::sync::mpsc::channel;
@@ -14,6 +16,10 @@ use websocket::{ClientBuilder, OwnedMessage};
 use atty::Stream;
 use signal_hook::consts::SIGWINCH;
 use signal_hook::iterator::Signals;
+
+use utils::{get_termsize , set_termsize};
+
+static MAGIC_FLAG : [u8;2] = [0x37, 0x37];
 
 fn help () {
 	println!("Cliws - Run a process and forwarding stdio to websocket");
@@ -35,7 +41,7 @@ fn connect( addr : String ){
 	let (tx, rx) = channel();
 
 	let tx_1 = tx.clone();
-
+	let tx_2 = tx.clone();
 	let send_loop = thread::spawn(move || {
 		loop {
 			let message = match rx.recv() {
@@ -46,7 +52,6 @@ fn connect( addr : String ){
 			};
 			match message {
 				OwnedMessage::Close(_) => {
-					let _ = sender.send_message(&message);
 					std::process::exit(0);
 				},
 				OwnedMessage::Binary(_) => {
@@ -101,69 +106,24 @@ fn connect( addr : String ){
 
 	thread::spawn(move || {
 
-		/*
-			from : https://github.com/t57root/amcsh/blob/master/amcsh.c
-
-			void sendws()
-			{
-				struct winsize ws;
-				if( isatty( 0 ) ){
-					if( ioctl( 0, TIOCGWINSZ, &ws ) < 0 ){
-						perror( "ioctl()" );
-						return;
-					}
-				}
-				else{
-					ws.ws_row = 25;
-					ws.ws_col = 80;
-				}
-
-				WINCH winch;
-				winch.flag[0] = magickey[0];
-				winch.flag[1] = magickey[1];
-				winch.flag[2] = 's';
-				winch.flag[3] = 's';
-				winch.ws_row = ws.ws_row;
-				winch.ws_col = ws.ws_col;
-				wsend(masterfd, &winch, sizeof(winch));
-			}
-		*/
-
 		for sig in signals.forever() {
 
 			if sig == SIGWINCH {
+
+				let size = get_termsize().unwrap();
+
+				let vec = [MAGIC_FLAG[0], MAGIC_FLAG[1] , size.ws_row as u8 , size.ws_col as u8 ];
+
+				let msg = OwnedMessage::Binary(vec.to_vec());
+				match tx_2.send(msg) {
+					Ok(()) => (),
+					Err(_) => {
+						break;
+					}
+				}
 			}
 		}
 	});
-
-
-	/*
-
-		from : https://github.com/t57root/amcsh/blob/master/amcsh.c
-
-		if( isatty( 1 ) ){
-			if( tcgetattr( 1, &tp ) < 0 ){
-				perror( "tcgetattr()" );
-				return 1;
-			}
-
-			memcpy( (void *) &tr, (void *) &tp, sizeof( tr ) );
-
-			tr.c_iflag |= IGNPAR;
-			tr.c_iflag &= ~(ISTRIP|INLCR|IGNCR|ICRNL|IXON|IXANY|IXOFF);
-			tr.c_lflag &= ~(ISIG|ICANON|ECHO|ECHOE|ECHOK|ECHONL|IEXTEN);
-			tr.c_oflag &= ~OPOST;
-
-			tr.c_cc[VMIN]  = 1;
-			tr.c_cc[VTIME] = 0;
-
-			if( tcsetattr( 1, TCSADRAIN, &tr ) < 0 ){
-				perror( "tcsetattr()" );
-				return 1;
-			}
-		}
-
-	*/
 
 	if atty::is(Stream::Stdin) {
 
@@ -179,6 +139,12 @@ fn connect( addr : String ){
 		termios::tcsetattr(STDIN_FILENO, termios::SetArg::TCSANOW, &flags).unwrap();
 	}
 
+
+	// first set terminal size
+	let size = get_termsize().unwrap();
+	let vec = [MAGIC_FLAG[0], MAGIC_FLAG[1] , size.ws_row as u8 , size.ws_col as u8 ];
+	let msg = OwnedMessage::Binary(vec.to_vec());
+	tx.send(msg).unwrap();
 
 	let mut fin = unsafe {File::from_raw_fd(0)};
 
@@ -374,6 +340,41 @@ fn main() {
 						
 					},
 					OwnedMessage::Binary(data) => {
+						/*                    
+							if(winch->flag[0]==magickey[0] && winch->flag[1]==magickey[1] 
+								&& winch->flag[2]=='s' && winch->flag[3]=='s'){
+								ws.ws_row = winch->ws_row;
+								ws.ws_col = winch->ws_col;
+								ws.ws_xpixel = 0;
+								ws.ws_ypixel = 0;
+								debuglog("Got new win size:%d,%d",ws.ws_row,ws.ws_col);
+								ioctl( pty, TIOCSWINSZ, &ws );
+							} 
+						*/
+						// set window size
+
+
+						if data.len() == 4{
+
+							if data[0] == MAGIC_FLAG[0] && data[1] == MAGIC_FLAG[1] {
+
+								let size = Box::new(libc::winsize{
+									ws_row : data[2]as u16, 
+									ws_col :  data[3] as u16 ,
+									ws_xpixel : 0,
+									ws_ypixel: 0, 
+									
+								});
+								
+								if set_termsize(size) {
+									std::process::exit(0);
+								}
+
+								continue;
+							}
+						}
+
+
 						let mut writer = writer_lck.lock().unwrap();
 						writer.write_all(data.as_slice()).unwrap();
 					},

@@ -1,20 +1,18 @@
-include!("../src/pio.rs");
+include!("../src/utils.rs");
 #[test]
-fn test_pio() {
-    let mut buf : [u8;1024] = [0;1024];
-
-    let mut pio = Pio::new();
-
-    pio.set(String::from("/bin/sh"), String::from(""));
-    pio.run();
-
-    pio.write("echo test1\n".as_bytes());
-    let result = pio.read(buf.as_mut());
-    assert_eq!(std::str::from_utf8(&buf[..result.unwrap()]).unwrap(), "test1\n");
-
-    buf.fill(0);
-
-    pio.write("echo test2\n".as_bytes());
-    let result = pio.read(buf.as_mut());
-    assert_eq!(std::str::from_utf8(&buf[..result.unwrap()]).unwrap(), "test2\n");
+fn test_get_termsize() {
+    let a = get_termsize().unwrap();
+    assert!(a.ws_row != 0);
+    assert!(a.ws_col != 0);
+}
+#[test]
+fn test_set_termsize() {
+    let size = Box::new(libc::winsize{
+        ws_row : 50, 
+        ws_col :  50,
+        ws_xpixel : 0,
+        ws_ypixel: 0, 
+        
+    });
+    set_termsize(size);
 }
