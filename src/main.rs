@@ -37,8 +37,6 @@ fn connect( addr : String ){
 
 	let bakflag = termios::tcgetattr(STDOUT_FILENO).unwrap();
 
-	log::info!("connect to : [{}]" ,addr );
-
 	let client = ClientBuilder::new(addr.as_str())
 	.unwrap()
 	.connect_insecure()
@@ -147,8 +145,7 @@ fn connect( addr : String ){
 
 		termios::tcsetattr(STDIN_FILENO, termios::SetArg::TCSANOW, &flags).unwrap();
 	}
-
-	log::info!("first set terminal size");
+	
 	// first set terminal size
 	let size = get_termsize(0).unwrap();
 	let vec = [MAGIC_FLAG[0], MAGIC_FLAG[1] , size.ws_row as u8 , size.ws_col as u8 ];
