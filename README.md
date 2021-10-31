@@ -4,7 +4,7 @@ Spawn process IO to websocket and support full PTY.
 # Features
 
 * Any process IO through Websocket
-* Client has full pty support: VIM, SSH, readline
+* Full pty support: VIM, SSH, readline
 
 # Build & Run
 
