@@ -18,6 +18,7 @@ use signal_hook::consts::SIGWINCH;
 use signal_hook::iterator::Signals;
 use ioctl_rs;
 use nix::unistd::{fork, ForkResult};
+use simple_logger::SimpleLogger;
 
 use utils::{get_termsize , set_termsize};
 
@@ -179,6 +180,8 @@ fn connect( addr : String ){
 
 fn main() {
 
+	SimpleLogger::new().with_colors(true).init().unwrap();
+
 	let arg_count = std::env::args().count();
 
 	if  arg_count == 1{
@@ -234,6 +237,7 @@ fn main() {
 			thread::spawn(move || {
 				let mut status = 0;
 				unsafe { libc::waitpid(i32::from(pid), &mut status ,0) };
+				log::warn!("child process exit!");
 				std::process::exit(0);
 			});
 
@@ -311,6 +315,9 @@ fn main() {
 			let client = request.accept().unwrap();
 
 			let port = client.peer_addr().unwrap().port();
+			let ip = client.peer_addr().unwrap().ip();
+
+			log::info!("accept from : [{}:{}]" ,ip , port );
 
 			let (mut receiver, mut sender) = client.split().unwrap();
 			{
@@ -330,6 +337,7 @@ fn main() {
 				let message = match message {
 					Ok(p) => p,
 					Err(_) => {
+						log::warn!("client closed : [{}:{}]" ,ip , port );
 						send_lck.lock().unwrap().remove(&port);
 						return;
 					},
