@@ -4,13 +4,13 @@ Spawn process IO to websocket and support full PTY.
 # Features
 
 * Any process IO through Websocket
-* Full pty support: VIM, SSH, readline
+* Full pty support: VIM, SSH, readline, Ctrl+X
 
 # Build & Run
 
-`$> cargo build`
+`$> cargo build --release`
 
-`$> ./target/debug/cliws`
+`$> ./target/release/cliws`
 
 # Usage
 
@@ -26,6 +26,8 @@ then connect and get a comfortable shell.
 
 ![image]( https://github.com/b23r0/Cliws/blob/main/example/cliws-vim.gif)
 
-# License
+# Reference
 
-MIT.
+* https://github.com/t57root/amcsh
+
+* https://github.com/philippkeller/rexpect

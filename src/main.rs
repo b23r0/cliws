@@ -5,6 +5,7 @@ use std::fs::File;
 use std::io::{Read, Write};
 use std::os::unix::prelude::{CommandExt, FromRawFd};
 use std::process::{Command, Stdio};
+use log::LevelFilter;
 use nix::libc::{self, STDIN_FILENO, STDOUT_FILENO};
 use nix::pty::openpty;
 use nix::sys::{termios};
@@ -181,6 +182,7 @@ fn connect( addr : String ){
 fn main() {
 
 	SimpleLogger::new().with_colors(true).init().unwrap();
+	::log::set_max_level(LevelFilter::Info);
 
 	let arg_count = std::env::args().count();
 
@@ -300,6 +302,7 @@ fn main() {
 
 	});
 
+	log::info!("websocket server listen : [{}:{}]" ,"0.0.0.0" , port );
 	let listen_addr = format!("{}:{}", "0.0.0.0", port);
 
 	let server = Server::bind(listen_addr).expect("!listen");
