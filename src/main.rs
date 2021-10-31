@@ -230,8 +230,13 @@ fn main() {
 
 
 	match unsafe { fork() } {
-		Ok(ForkResult::Parent { child: _, .. }) => {
-			
+		Ok(ForkResult::Parent { child: pid, .. }) => {
+			thread::spawn(move || {
+				let mut status = 0;
+				unsafe { libc::waitpid(i32::from(pid), &mut status ,0) };
+				std::process::exit(0);
+			});
+
 		}
 		Ok(ForkResult::Child) => {
 			unsafe { ioctl_rs::ioctl(master, ioctl_rs::TIOCNOTTY) };
