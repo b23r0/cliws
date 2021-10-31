@@ -5,6 +5,7 @@ Spawn process IO to websocket and support full PTY.
 
 * Any process IO through Websocket
 * Full pty support: VIM, SSH, readline, Ctrl+X
+* Auto set terminal window size.
 
 # Build & Run
 
