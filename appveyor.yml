@@ -1,0 +1,9 @@
+language rust
+sudo false
+
+matrix
+  include
+
+  - rust stable
+    script
+    - cargo test --all --locked
