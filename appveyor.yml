@@ -1,9 +1,9 @@
-language rust
-sudo false
+language: rust
+sudo: false
 
-matrix
-  include
+matrix:
+  include:
 
-  - rust stable
-    script
+  - rust: stable
+    script:
     - cargo test --all --locked
