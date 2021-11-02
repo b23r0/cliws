@@ -32,7 +32,7 @@ First listen a port wait for shell
 
 `$> ./cliws -l 8000`
 
-then reverse connection
+then build a reverse connection
 
 `$> ./cliws -r ws://127.0.0.1:8000 bash -i`
 
