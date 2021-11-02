@@ -6,6 +6,7 @@ Spawn process IO to websocket and support full PTY.
 * Any process IO through Websocket
 * Full pty support: VIM, SSH, readline, Ctrl+X
 * Auto set terminal window size.
+* Reverse connection / Bind port
 
 # Build & Run
 
@@ -15,6 +16,8 @@ Spawn process IO to websocket and support full PTY.
 
 # Usage
 
+## Direct
+
 You can run a bash and listen port at 8000
 
 `$> ./cliws -p 8000 bash -i`
@@ -22,6 +25,16 @@ You can run a bash and listen port at 8000
 then connect and get a comfortable shell.
 
 `$> ./cliws -c ws://127.0.0.1:8000`
+
+## Reverse
+
+First listen a port wait for shell
+
+`$> ./cliws -l 8000`
+
+then reverse connection
+
+`$> ./cliws -r ws://127.0.0.1:8000 bash -i`
 
 # Example
 
