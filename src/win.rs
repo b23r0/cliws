@@ -1,6 +1,6 @@
 include!("utils.rs");
 
-use conpty::{Process};
+use conpty::{Process, console};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{Read, Write};
@@ -30,6 +30,9 @@ pub fn connect( addr : String ){
 	.unwrap()
 	.connect_insecure()
 	.unwrap();
+
+	let console = console::Console::current().unwrap();
+	console.set_raw().unwrap();
 
 	let (mut receiver, mut sender) = client.split().unwrap();
 
