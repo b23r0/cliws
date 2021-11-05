@@ -14,8 +14,15 @@ nix = "0.23.0"
 atty = "0.2"
 ioctl-rs = "0.2"
 signal-hook = "0.3.10"
+#openssl-sys = "0.9.67"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 ntapi = "0.3.6"
 winapi = { version = "0.3.9", features = ["namedpipeapi","synchapi"] }
 conpty = "0.2.1"
+
+# [target.'cfg(target_os = "linux")'.features]
+# cargo build --target=x86_64-unknown-linux-musl --features vendored --release
+# Force openssl-sys to staticly link in the openssl library. Necessary when
+# cross compiling to x86_64-unknown-linux-musl.
+# vendored = ["openssl-sys/vendored"]
