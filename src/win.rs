@@ -1,20 +1,24 @@
 include!("utils.rs");
 
 use conpty::{Process, console};
+use winapi::um::namedpipeapi::CreatePipe;
+use winapi::um::wincon::{CONSOLE_SCREEN_BUFFER_INFO, ENABLE_LVB_GRID_WORLDWIDE, ENABLE_VIRTUAL_TERMINAL_PROCESSING, GetConsoleScreenBufferInfo, SetConsoleCP, SetConsoleOutputCP, SetConsoleWindowInfo};
+use winapi::um::wincontypes::{COORD, HPCON, SMALL_RECT};
 use std::collections::HashMap;
+use std::ffi::c_void;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::os::windows::prelude::FromRawHandle;
 use std::sync::mpsc::channel;
 use std::sync::{Arc, Mutex};
-use std::{ptr, thread};
+use std::{ptr, thread, time};
 use websocket::sync::{Server, Writer};
 use websocket::{ClientBuilder, OwnedMessage};
 use winapi::um::processthreadsapi::{OpenProcess};
-use winapi::um::consoleapi::{AllocConsole};
-use winapi::um::processenv::{GetStdHandle};
-use winapi::um::winbase::{INFINITE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE};
-use winapi::um::winnt::{PROCESS_ALL_ACCESS};
+use winapi::um::consoleapi::{AllocConsole, CreatePseudoConsole, GetConsoleMode, SetConsoleMode};
+use winapi::um::processenv::{GetStdHandle, SetStdHandle};
+use winapi::um::winbase::{INFINITE, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE};
+use winapi::um::winnt::{HANDLE, PROCESS_ALL_ACCESS};
 use winapi::um::synchapi::WaitForSingleObject;
 
 struct ProcWrapper(Process);
@@ -24,12 +28,20 @@ pub fn rconnect( addr : String , subprocess : String , fullargs : Vec<String>){}
 pub fn rbind(port : String){}
 pub fn connect( addr : String ){
 
-	unsafe { AllocConsole() };
-
 	let client = ClientBuilder::new(addr.as_str())
 	.unwrap()
 	.connect_insecure()
 	.unwrap();
+
+	let mut mode = 0 as u32;
+	
+	let ret = unsafe { GetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE), &mut mode)};
+
+	if ret == 0 {
+		log::error!("get console mode faild!");
+		std::process::exit(0);
+	}
+	
 
 	let console = console::Console::current().unwrap();
 	console.set_raw().unwrap();
@@ -49,6 +61,7 @@ pub fn connect( addr : String ){
 			};
 			match message {
 				OwnedMessage::Close(_) => {
+					unsafe {SetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE) , mode)};
 					std::process::exit(0);
 				},
 				OwnedMessage::Binary(_) => {
@@ -65,6 +78,42 @@ pub fn connect( addr : String ){
 			}
 		}
 	});
+
+	let tx_2 = tx.clone();
+	thread::spawn( move ||{
+		let mut row = 0 ;
+		let mut col = 0;
+
+		let h = unsafe { GetStdHandle(STD_OUTPUT_HANDLE) };
+		loop {
+			let mut csbi: CONSOLE_SCREEN_BUFFER_INFO = unsafe { std::mem::zeroed() };
+			let ret = unsafe { GetConsoleScreenBufferInfo( h  , &mut csbi)};
+
+			if ret == 0 {
+				log::error!("get console size faild!");
+				unsafe {SetConsoleMode(h , mode)};
+				std::process::exit(0);
+			}
+
+			if row != csbi.srWindow.Bottom || col != csbi.srWindow.Right {
+				let vec = [MAGIC_FLAG[0], MAGIC_FLAG[1] , csbi.srWindow.Bottom as u8 , csbi.srWindow.Right as u8 ];
+				
+				let msg = OwnedMessage::Binary(vec.to_vec());
+				match tx_2.send(msg) {
+					Ok(()) => (),
+					Err(_) => {
+						break;
+					}
+				}
+
+				row = csbi.srWindow.Bottom;
+				col = csbi.srWindow.Right;
+			} 
+
+			thread::sleep(time::Duration::from_secs(1));
+		}
+		
+	} );
 
 	let receive_loop = thread::spawn(move || {
 
@@ -257,8 +306,8 @@ pub fn bind(port : String , subprocess : String , fullargs : Vec<String>) {
 
 							if data[0] == MAGIC_FLAG[0] && data[1] == MAGIC_FLAG[1] {
 	
-								let row = data[2] as i16;
-								let col = data[3] as i16;
+								let row = data[2] as i16 + 1;
+								let col = data[3] as i16 + 1;
 
 								proc_lck1.lock().unwrap().0.resize(col , row).unwrap();
 								continue;
