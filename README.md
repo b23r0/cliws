@@ -1,8 +1,9 @@
 # Cliws [![Build Status](https://app.travis-ci.com/b23r0/Cliws.svg?branch=main)](https://app.travis-ci.com/b23r0/Cliws) [![ChatOnDiscord](https://img.shields.io/badge/chat-on%20discord-blue)](https://discord.gg/ZKtYMvDFN4) [![LastCommit](https://img.shields.io/github/last-commit/b23r0/cliws)](https://github.com/b23r0/Cliws/) 
-Lightweight bind/reverse PTY(Linux & Windows) Shell through websocket communication implementation for Rust. 
+Lightweight bind/reverse PTY shell with Windows&Linux support implementation by Rust.
 
 # Features
 
+* WebSocket
 * Full pty support: VIM, SSH, readline, Ctrl+X
 * Auto set terminal window size.
 * Reverse connection / Bind port
@@ -16,7 +17,7 @@ Lightweight bind/reverse PTY(Linux & Windows) Shell through websocket communicat
 
 # Usage
 
-## Direct
+## Bind Mode
 
 You can run a bash and listen port at 8000
 
@@ -26,7 +27,7 @@ then connect and get a comfortable shell.
 
 `$> ./cliws -c ws://127.0.0.1:8000`
 
-## Reverse
+## Reverse Mode
 
 First listen a port wait for shell
 
