@@ -1,5 +1,5 @@
 # Cliws [![Build Status](https://app.travis-ci.com/b23r0/Cliws.svg?branch=main)](https://app.travis-ci.com/b23r0/Cliws) [![ChatOnDiscord](https://img.shields.io/badge/chat-on%20discord-blue)](https://discord.gg/ZKtYMvDFN4) [![LastCommit](https://img.shields.io/github/last-commit/b23r0/cliws)](https://github.com/b23r0/Cliws/) 
-Lightweight websocket bind/reverse PTY shell implementation for Rust.
+Lightweight bind/reverse PTY(Linux & Windows) Shell through websocket communication implementation for Rust. 
 
 # Features
 
