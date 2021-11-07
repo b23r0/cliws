@@ -1,12 +1,13 @@
 # Cliws [![Build Status](https://app.travis-ci.com/b23r0/Cliws.svg?branch=main)](https://app.travis-ci.com/b23r0/Cliws) [![ChatOnDiscord](https://img.shields.io/badge/chat-on%20discord-blue)](https://discord.gg/ZKtYMvDFN4) [![LastCommit](https://img.shields.io/github/last-commit/b23r0/cliws)](https://github.com/b23r0/Cliws/) 
-Spawn process IO to websocket with full PTY support.
+Spawn shell to websocket with Linux & Windows full PTY support lightweight implementation for Rust.
 
 # Features
 
-* Any process IO through Websocket
+* Any process IO through Websocket.
 * Full pty support: VIM, SSH, readline, Ctrl+X
 * Auto set terminal window size.
 * Reverse connection / Bind port
+* Support Win10+(Windows Server 2019+) & Linux
 
 # Build & Run
 

@@ -1,11 +1,8 @@
 include!("utils.rs");
 
 use conpty::{Process, console};
-use winapi::um::namedpipeapi::CreatePipe;
-use winapi::um::wincon::{CONSOLE_SCREEN_BUFFER_INFO, ENABLE_LVB_GRID_WORLDWIDE, ENABLE_VIRTUAL_TERMINAL_PROCESSING, GetConsoleScreenBufferInfo, SetConsoleCP, SetConsoleOutputCP, SetConsoleWindowInfo};
-use winapi::um::wincontypes::{COORD, HPCON, SMALL_RECT};
+use winapi::um::wincon::{CONSOLE_SCREEN_BUFFER_INFO, GetConsoleScreenBufferInfo};
 use std::collections::HashMap;
-use std::ffi::c_void;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::os::windows::prelude::FromRawHandle;
@@ -15,17 +12,269 @@ use std::{ptr, thread, time};
 use websocket::sync::{Server, Writer};
 use websocket::{ClientBuilder, OwnedMessage};
 use winapi::um::processthreadsapi::{OpenProcess};
-use winapi::um::consoleapi::{AllocConsole, CreatePseudoConsole, GetConsoleMode, SetConsoleMode};
-use winapi::um::processenv::{GetStdHandle, SetStdHandle};
-use winapi::um::winbase::{INFINITE, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE};
-use winapi::um::winnt::{HANDLE, PROCESS_ALL_ACCESS};
+use winapi::um::consoleapi::{ GetConsoleMode, SetConsoleMode};
+use winapi::um::processenv::{GetStdHandle};
+use winapi::um::winbase::{INFINITE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE};
+use winapi::um::winnt::{ PROCESS_ALL_ACCESS};
 use winapi::um::synchapi::WaitForSingleObject;
 
 struct ProcWrapper(Process);
 unsafe impl Send for ProcWrapper {}
 
-pub fn rconnect( addr : String , subprocess : String , fullargs : Vec<String>){}
-pub fn rbind(port : String){}
+pub fn rconnect( addr : String , subprocess : String , fullargs : Vec<String>){
+
+	let client = ClientBuilder::new(addr.as_str())
+	.unwrap()
+	.connect_insecure()
+	.unwrap();
+
+	let (mut receiver, mut sender) = client.split().unwrap();
+	let (tx, rx) = channel();
+
+	let tx_1 = tx.clone();
+
+	let full_cmd = subprocess + fullargs.join(" ").as_str();
+
+	log::info!("start process: [{}]" ,full_cmd );
+
+	let proc = conpty::spawn(full_cmd).unwrap();
+	let pid = proc.pid();
+
+	let mut ptyin = proc.input().unwrap();
+	let mut ptyout = proc.output().unwrap();
+
+	let proc_lck = Arc::new(Mutex::new(ProcWrapper(proc)));
+
+	thread::spawn(move || {
+		let handle = unsafe { OpenProcess(PROCESS_ALL_ACCESS, 0, pid) };
+
+		if handle != ptr::null_mut() {
+			unsafe { WaitForSingleObject(handle, INFINITE)};
+		}
+		log::warn!("child process exit!");
+		std::process::exit(0);
+
+	});
+
+	thread::spawn(move || {
+
+		let mut buf : [u8;1024] = [0;1024];
+		loop {
+
+			let result = ptyout.read(buf.as_mut());
+			let size = result.unwrap();	
+
+			
+			if size == 0 {
+				break;
+			}
+
+			let msg = OwnedMessage::Binary(buf.to_vec());
+			match tx.send(msg) {
+				Ok(()) => (),
+				Err(_) => {
+					break;
+				}
+			}
+			buf.fill(0);
+		}
+
+	});
+
+	let send_loop = thread::spawn(move || {
+		loop {
+			let message = match rx.recv() {
+				Ok(m) => m,
+				Err(_) => {
+					return;
+				}
+			};
+			match message {
+				OwnedMessage::Close(_) => {
+					std::process::exit(0);
+				},
+				OwnedMessage::Binary(_) => {
+					let _ = sender.send_message(&message);
+				},
+				OwnedMessage::Text(_) => {
+					let _ = sender.send_message(&message);
+				},
+				OwnedMessage::Ping(message) => {
+					let _ = sender.send_message(&OwnedMessage::Ping(message));
+				},
+				OwnedMessage::Pong(_) => {},
+
+			}
+		}
+	});
+
+	let receive_loop = thread::spawn(move || {
+
+		for message in receiver.incoming_messages() {
+			let message = match message {
+				Ok(m) => m,
+				Err(_) => {
+					let _ = tx_1.send(OwnedMessage::Close(None));
+					return;
+				}
+			};
+			match message {
+				OwnedMessage::Close(_) => {
+					let _ = tx_1.send(OwnedMessage::Close(None));
+					return;
+				},
+				OwnedMessage::Ping(message) => {
+					let _ = tx_1.send(OwnedMessage::Pong(message));
+				},
+				OwnedMessage::Text(text) => {
+					ptyin.write_all(text.as_bytes()).unwrap();
+					
+				},
+				OwnedMessage::Binary(data) => {
+
+					if data.len() == 4{
+
+						if data[0] == MAGIC_FLAG[0] && data[1] == MAGIC_FLAG[1] {
+
+							let row = data[2] as i16 + 1;
+							let col = data[3] as i16 + 1;
+
+							proc_lck.lock().unwrap().0.resize(col , row).unwrap();
+							continue;
+						}
+					}
+
+					ptyin.write_all(data.as_slice()).unwrap();
+				},
+				OwnedMessage::Pong(_) => {
+					//let _ = tx_1.send(OwnedMessage::Ping([0].to_vec()));
+				},
+			}
+		}
+	});
+
+	let _ = send_loop.join();
+	let _ = receive_loop.join();
+
+	return;
+}
+pub fn rbind(port : String){
+
+	log::info!("listen to: [{}:{}]" ,"0.0.0.0" , port );
+	let listen_addr = format!("{}:{}", "0.0.0.0", port);
+
+	let mut server = Server::bind(listen_addr).expect("!listen");
+
+	let request = server.accept().unwrap();
+	let client = request.accept().unwrap();
+
+	let port = client.peer_addr().unwrap().port();
+	let ip = client.peer_addr().unwrap().ip();
+
+	log::info!("accept from : [{}:{}]" ,ip , port );
+
+	let (mut receiver, sender) = client.split().unwrap();
+	
+
+	let slck = Arc::new(Mutex::new(sender));
+	let slck_1 = slck.clone();
+	let slck_2 = slck.clone();
+	let slck_3 = slck.clone();
+	
+	let mut mode = 0 as u32;
+	
+	let ret = unsafe { GetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE), &mut mode)};
+
+	if ret == 0 {
+		log::error!("get console mode faild!");
+		std::process::exit(0);
+	}
+	
+
+	let console = console::Console::current().unwrap();
+	console.set_raw().unwrap();
+
+	thread::spawn(move || {
+
+		let mut fin = unsafe {File::from_raw_handle(GetStdHandle(STD_INPUT_HANDLE))};
+
+		loop{
+			
+			let mut buf : [u8;1] = [0];
+			let size = fin.read(buf.as_mut()).unwrap();
+
+			if size == 0 {
+				break;
+			}
+
+			let msg = OwnedMessage::Binary(buf.to_vec());
+			slck_1.lock().unwrap().send_message(&msg).unwrap();
+		}
+	});
+
+	thread::spawn( move ||{
+		let mut row = 0 ;
+		let mut col = 0;
+
+		let h = unsafe { GetStdHandle(STD_OUTPUT_HANDLE) };
+		loop {
+			let mut csbi: CONSOLE_SCREEN_BUFFER_INFO = unsafe { std::mem::zeroed() };
+			let ret = unsafe { GetConsoleScreenBufferInfo( h  , &mut csbi)};
+
+			if ret == 0 {
+				log::error!("get console size faild!");
+				unsafe {SetConsoleMode(h , mode)};
+				std::process::exit(0);
+			}
+
+			if row != csbi.srWindow.Bottom || col != csbi.srWindow.Right {
+				let vec = [MAGIC_FLAG[0], MAGIC_FLAG[1] , csbi.srWindow.Bottom as u8 , csbi.srWindow.Right as u8 ];
+				
+				let msg = OwnedMessage::Binary(vec.to_vec());
+				slck_3.lock().unwrap().send_message(&msg).unwrap();
+
+				row = csbi.srWindow.Bottom;
+				col = csbi.srWindow.Right;
+			} 
+
+			thread::sleep(time::Duration::from_secs(1));
+		}
+		
+	} );
+
+	let mut out = unsafe {File::from_raw_handle(GetStdHandle(STD_OUTPUT_HANDLE))};
+
+	for message in receiver.incoming_messages() {
+		let message = match message {
+			Ok(p) => p,
+			Err(_) => {
+				log::warn!("client closed : [{}:{}]" ,ip , port );
+				unsafe {SetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE) , mode)};
+				std::process::exit(0);
+			},
+		};
+		
+		match message {
+			OwnedMessage::Close(_) => {
+				log::warn!("client closed : [{}:{}]" ,ip , port );
+				unsafe {SetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE) , mode)};
+				std::process::exit(0);
+			},
+			OwnedMessage::Ping(ping) => {
+				let message = OwnedMessage::Pong(ping);
+				slck_2.lock().unwrap().send_message(&message).unwrap();
+			},
+			OwnedMessage::Text(text) => {
+				out.write_all(text.as_bytes()).unwrap();
+				
+			},
+			OwnedMessage::Binary(data) => {
+				out.write_all(data.as_slice()).unwrap();
+			},
+			_ => {},
+		}
+	}
+}
 pub fn connect( addr : String ){
 
 	let client = ClientBuilder::new(addr.as_str())
