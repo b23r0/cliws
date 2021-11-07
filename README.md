@@ -45,3 +45,7 @@ then build a reverse connection
 * https://github.com/t57root/amcsh
 
 * https://github.com/philippkeller/rexpect
+
+* https://github.com/zhiburt/conpty
+
+* https://securityonline.info/conptyshell-interactive-reverse-shell/
