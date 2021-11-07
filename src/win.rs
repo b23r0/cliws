@@ -1,6 +1,6 @@
 include!("utils.rs");
 
-use conpty::{Process, console};
+use conpty::{console};
 use winapi::um::wincon::{CONSOLE_SCREEN_BUFFER_INFO, GetConsoleScreenBufferInfo};
 use std::collections::HashMap;
 use std::fs::File;
@@ -18,15 +18,23 @@ use winapi::um::winbase::{INFINITE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE};
 use winapi::um::winnt::{ PROCESS_ALL_ACCESS};
 use winapi::um::synchapi::WaitForSingleObject;
 
-struct ProcWrapper(Process);
-unsafe impl Send for ProcWrapper {}
-
 pub fn rconnect( addr : String , subprocess : String , fullargs : Vec<String>){
 
-	let client = ClientBuilder::new(addr.as_str())
-	.unwrap()
-	.connect_insecure()
-	.unwrap();
+	let client = match  { 
+		match ClientBuilder::new(addr.as_str()){
+			Err(_) => {
+				log::error!("parse address [{}] faild. eg : ws://127.0.0.1:8000" , addr);
+				return;
+			},
+			Ok(p) => p
+		}
+	}.connect_insecure() {
+		Err(_) => {
+			log::error!("connect [{}] faild" , addr);
+			return;
+		},
+		Ok(p) => p
+	};
 
 	let (mut receiver, mut sender) = client.split().unwrap();
 	let (tx, rx) = channel();
@@ -42,8 +50,6 @@ pub fn rconnect( addr : String , subprocess : String , fullargs : Vec<String>){
 
 	let mut ptyin = proc.input().unwrap();
 	let mut ptyout = proc.output().unwrap();
-
-	let proc_lck = Arc::new(Mutex::new(ProcWrapper(proc)));
 
 	thread::spawn(move || {
 		let handle = unsafe { OpenProcess(PROCESS_ALL_ACCESS, 0, pid) };
@@ -81,7 +87,7 @@ pub fn rconnect( addr : String , subprocess : String , fullargs : Vec<String>){
 
 	});
 
-	let send_loop = thread::spawn(move || {
+	thread::spawn(move || {
 		loop {
 			let message = match rx.recv() {
 				Ok(m) => m,
@@ -108,53 +114,47 @@ pub fn rconnect( addr : String , subprocess : String , fullargs : Vec<String>){
 		}
 	});
 
-	let receive_loop = thread::spawn(move || {
-
-		for message in receiver.incoming_messages() {
-			let message = match message {
-				Ok(m) => m,
-				Err(_) => {
-					let _ = tx_1.send(OwnedMessage::Close(None));
-					return;
-				}
-			};
-			match message {
-				OwnedMessage::Close(_) => {
-					let _ = tx_1.send(OwnedMessage::Close(None));
-					return;
-				},
-				OwnedMessage::Ping(message) => {
-					let _ = tx_1.send(OwnedMessage::Pong(message));
-				},
-				OwnedMessage::Text(text) => {
-					ptyin.write_all(text.as_bytes()).unwrap();
-					
-				},
-				OwnedMessage::Binary(data) => {
-
-					if data.len() == 4{
-
-						if data[0] == MAGIC_FLAG[0] && data[1] == MAGIC_FLAG[1] {
-
-							let row = data[2] as i16 + 1;
-							let col = data[3] as i16 + 1;
-
-							proc_lck.lock().unwrap().0.resize(col , row).unwrap();
-							continue;
-						}
-					}
-
-					ptyin.write_all(data.as_slice()).unwrap();
-				},
-				OwnedMessage::Pong(_) => {
-					//let _ = tx_1.send(OwnedMessage::Ping([0].to_vec()));
-				},
+	for message in receiver.incoming_messages() {
+		let message = match message {
+			Ok(m) => m,
+			Err(_) => {
+				let _ = tx_1.send(OwnedMessage::Close(None));
+				return;
 			}
-		}
-	});
+		};
+		match message {
+			OwnedMessage::Close(_) => {
+				let _ = tx_1.send(OwnedMessage::Close(None));
+				return;
+			},
+			OwnedMessage::Ping(message) => {
+				let _ = tx_1.send(OwnedMessage::Pong(message));
+			},
+			OwnedMessage::Text(text) => {
+				ptyin.write_all(text.as_bytes()).unwrap();
+				
+			},
+			OwnedMessage::Binary(data) => {
 
-	let _ = send_loop.join();
-	let _ = receive_loop.join();
+				if data.len() == 6{
+
+					if data[0] == MAGIC_FLAG[0] && data[1] == MAGIC_FLAG[1] {
+
+						let row = makeword(data[2] , data[3]);
+						let col = makeword(data[4] , data[5]);
+
+						proc.resize(col as i16 , row as i16).unwrap();
+						continue;
+					}
+				}
+
+				ptyin.write_all(data.as_slice()).unwrap();
+			},
+			OwnedMessage::Pong(_) => {
+				//let _ = tx_1.send(OwnedMessage::Ping([0].to_vec()));
+			},
+		}
+	}
 
 	return;
 }
@@ -163,7 +163,13 @@ pub fn rbind(port : String){
 	log::info!("listen to: [{}:{}]" ,"0.0.0.0" , port );
 	let listen_addr = format!("{}:{}", "0.0.0.0", port);
 
-	let mut server = Server::bind(listen_addr).expect("!listen");
+	let mut server = match Server::bind(listen_addr) {
+		Err(_) => {
+			log::error!("bind [0.0.0.0:{}] faild" , port);
+			return;
+		}, 
+		Ok(p) => p
+	};
 
 	let request = server.accept().unwrap();
 	let client = request.accept().unwrap();
@@ -176,10 +182,9 @@ pub fn rbind(port : String){
 	let (mut receiver, sender) = client.split().unwrap();
 	
 
-	let slck = Arc::new(Mutex::new(sender));
-	let slck_1 = slck.clone();
-	let slck_2 = slck.clone();
-	let slck_3 = slck.clone();
+	let slck_1 = Arc::new(Mutex::new(sender));
+	let slck_2 = slck_1.clone();
+	let slck_3 = slck_1.clone();
 	
 	let mut mode = 0 as u32;
 	
@@ -208,7 +213,7 @@ pub fn rbind(port : String){
 			}
 
 			let msg = OwnedMessage::Binary(buf.to_vec());
-			slck_1.lock().unwrap().send_message(&msg).unwrap();
+			slck_2.lock().unwrap().send_message(&msg).unwrap();
 		}
 	});
 
@@ -217,6 +222,7 @@ pub fn rbind(port : String){
 		let mut col = 0;
 
 		let h = unsafe { GetStdHandle(STD_OUTPUT_HANDLE) };
+		
 		loop {
 			let mut csbi: CONSOLE_SCREEN_BUFFER_INFO = unsafe { std::mem::zeroed() };
 			let ret = unsafe { GetConsoleScreenBufferInfo( h  , &mut csbi)};
@@ -228,7 +234,11 @@ pub fn rbind(port : String){
 			}
 
 			if row != csbi.srWindow.Bottom || col != csbi.srWindow.Right {
-				let vec = [MAGIC_FLAG[0], MAGIC_FLAG[1] , csbi.srWindow.Bottom as u8 , csbi.srWindow.Right as u8 ];
+
+				let (bottom1 , bottom2) = splitword((csbi.srWindow.Bottom + 1) as u16);
+				let (right1 , right2) = splitword((csbi.srWindow.Right + 1) as u16);
+				
+				let vec = [MAGIC_FLAG[0], MAGIC_FLAG[1] , bottom1 , bottom2 , right1 , right2 ];
 				
 				let msg = OwnedMessage::Binary(vec.to_vec());
 				slck_3.lock().unwrap().send_message(&msg).unwrap();
@@ -262,7 +272,7 @@ pub fn rbind(port : String){
 			},
 			OwnedMessage::Ping(ping) => {
 				let message = OwnedMessage::Pong(ping);
-				slck_2.lock().unwrap().send_message(&message).unwrap();
+				slck_1.lock().unwrap().send_message(&message).unwrap();
 			},
 			OwnedMessage::Text(text) => {
 				out.write_all(text.as_bytes()).unwrap();
@@ -277,10 +287,21 @@ pub fn rbind(port : String){
 }
 pub fn connect( addr : String ){
 
-	let client = ClientBuilder::new(addr.as_str())
-	.unwrap()
-	.connect_insecure()
-	.unwrap();
+	let client = match  { 
+		match ClientBuilder::new(addr.as_str()){
+			Err(_) => {
+				log::error!("parse address [{}] faild. eg : ws://127.0.0.1:8000" , addr);
+				return;
+			},
+			Ok(p) => p
+		}
+	}.connect_insecure() {
+		Err(_) => {
+			log::error!("connect [{}] faild" , addr);
+			return;
+		},
+		Ok(p) => p
+	};
 
 	let mut mode = 0 as u32;
 	
@@ -345,7 +366,11 @@ pub fn connect( addr : String ){
 			}
 
 			if row != csbi.srWindow.Bottom || col != csbi.srWindow.Right {
-				let vec = [MAGIC_FLAG[0], MAGIC_FLAG[1] , csbi.srWindow.Bottom as u8 , csbi.srWindow.Right as u8 ];
+
+				let (bottom1 , bottom2) = splitword((csbi.srWindow.Bottom + 1) as u16);
+				let (right1 , right2) = splitword((csbi.srWindow.Right + 1) as u16);
+				
+				let vec = [MAGIC_FLAG[0], MAGIC_FLAG[1] , bottom1 , bottom2 , right1 , right2 ];
 				
 				let msg = OwnedMessage::Binary(vec.to_vec());
 				match tx_2.send(msg) {
@@ -435,10 +460,8 @@ pub fn bind(port : String , subprocess : String , fullargs : Vec<String>) {
 	let proc = conpty::spawn(full_cmd).unwrap();
 	let pid = proc.pid();
 
-	let ptyin = proc.input().unwrap();
+	let mut ptyin = proc.input().unwrap();
 	let mut ptyout = proc.output().unwrap();
-
-	let proc_lck = Arc::new(Mutex::new(ProcWrapper(proc)));
 
 	thread::spawn(move || {
 		let handle = unsafe { OpenProcess(PROCESS_ALL_ACCESS, 0, pid) };
@@ -450,18 +473,17 @@ pub fn bind(port : String , subprocess : String , fullargs : Vec<String>) {
 		std::process::exit(0);
 
 	});
-	
-	let rc_writer = Arc::new(Mutex::new(ptyin));
 
 	let history : Vec<u8> = Vec::new();
-	let history_lcks = Arc::new(Mutex::new(history)); 
+	let history_lck1 = Arc::new(Mutex::new(history)); 
 
 	let senders : HashMap<u16 , Arc<Mutex<Writer<std::net::TcpStream>>>> = HashMap::new();
 
-	let senders_lcks = Arc::new(Mutex::new(senders));
-	let send_lck = senders_lcks.clone();
+	let sender_lck1 = Arc::new(Mutex::new(senders));
+	let sender_lck2 = sender_lck1.clone();
 	
-	let history_lock = history_lcks.clone();
+	let history_lck2 = history_lck1.clone();
+
 	thread::spawn(move || {
 
 		let mut buf : [u8;1024] = [0;1024];
@@ -474,9 +496,9 @@ pub fn bind(port : String , subprocess : String , fullargs : Vec<String>) {
 				std::process::exit(0);
 			}
 
-			{ history_lock.lock().unwrap().append(buf[..size].to_vec().as_mut()); }
+			{ history_lck2.lock().unwrap().append(buf[..size].to_vec().as_mut()); }
 			
-			let mut map = send_lck.lock().unwrap();
+			let mut map = sender_lck2.lock().unwrap();
 			for i in map.iter_mut(){
 				let msg = OwnedMessage::Binary(buf[..size].to_vec());
 				match i.1.lock().unwrap().send_message(&msg){
@@ -494,81 +516,74 @@ pub fn bind(port : String , subprocess : String , fullargs : Vec<String>) {
 	log::info!("listen to: [{}:{}]" ,"0.0.0.0" , port );
 	let listen_addr = format!("{}:{}", "0.0.0.0", port);
 
-	let server = Server::bind(listen_addr).expect("!listen");
+	let mut server = match Server::bind(listen_addr) {
+		Err(_) => {
+			log::error!("bind [0.0.0.0:{}] faild" , port);
+			return;
+		}, 
+		Ok(p) => p
+	};
 
-	for request in server.filter_map(Result::ok) {
+	let request = server.accept().unwrap();
+	let client = request.accept().unwrap();
 
-		let writer_lck = rc_writer.clone();
-		let send_lck = senders_lcks.clone();
+	let port = client.peer_addr().unwrap().port();
+	let ip = client.peer_addr().unwrap().ip();
 
-		let history_lock = history_lcks.clone();
-		let proc_lck1 = proc_lck.clone();
-		thread::spawn( move || {
+	log::info!("accept from : [{}:{}]" ,ip , port );
 
-			let client = request.accept().unwrap();
-
-			let port = client.peer_addr().unwrap().port();
-			let ip = client.peer_addr().unwrap().ip();
-
-			log::info!("accept from : [{}:{}]" ,ip , port );
-
-			let (mut receiver, mut sender) = client.split().unwrap();
-			{
-				let data = history_lock.lock().unwrap();
-				let msg =OwnedMessage::Binary(data.to_vec());
-				sender.send_message(&msg).unwrap();
-			}
-			
-
-			let slck = Arc::new(Mutex::new(sender));
-			{
-				let mut s = send_lck.lock().unwrap();
-				s.insert(port , slck.clone());
-			}
-			
-			for message in receiver.incoming_messages() {
-				let message = match message {
-					Ok(p) => p,
-					Err(_) => {
-						log::warn!("client closed : [{}:{}]" ,ip , port );
-						send_lck.lock().unwrap().remove(&port);
-						return;
-					},
-				};
-				
-				match message {
-					OwnedMessage::Close(_) => {
-						send_lck.lock().unwrap().remove(&port);
-						return;
-					},
-					OwnedMessage::Ping(ping) => {
-						let message = OwnedMessage::Pong(ping);
-						slck.lock().unwrap().send_message(&message).unwrap();
-					},
-					OwnedMessage::Text(text) => {
-						let mut writer = writer_lck.lock().unwrap();
-						writer.write_all(text.as_bytes()).unwrap();
-					},
-					OwnedMessage::Binary(data) => {
-
-						if data.len() == 4{
-
-							if data[0] == MAGIC_FLAG[0] && data[1] == MAGIC_FLAG[1] {
+	let (mut receiver, mut sender) = client.split().unwrap();
+	{
+		let data = history_lck1.lock().unwrap();
+		let msg =OwnedMessage::Binary(data.to_vec());
+		sender.send_message(&msg).unwrap();
+	}
 	
-								let row = data[2] as i16 + 1;
-								let col = data[3] as i16 + 1;
 
-								proc_lck1.lock().unwrap().0.resize(col , row).unwrap();
-								continue;
-							}
-						}
-						
-						let mut writer = writer_lck.lock().unwrap();
-						writer.write_all(data.as_slice()).unwrap();
-					},
-					_ => {},
+	let slck = Arc::new(Mutex::new(sender));
+	{
+		let mut s = sender_lck1.lock().unwrap();
+		s.insert(port , slck.clone());
+	}
+	
+	for message in receiver.incoming_messages() {
+		let message = match message {
+			Ok(p) => p,
+			Err(_) => {
+				log::warn!("client closed : [{}:{}]" ,ip , port );
+				sender_lck1.lock().unwrap().remove(&port);
+				return;
+			},
+		};
+		
+		match message {
+			OwnedMessage::Close(_) => {
+				sender_lck1.lock().unwrap().remove(&port);
+				return;
+			},
+			OwnedMessage::Ping(ping) => {
+				let message = OwnedMessage::Pong(ping);
+				slck.lock().unwrap().send_message(&message).unwrap();
+			},
+			OwnedMessage::Text(text) => {
+				ptyin.write_all(text.as_bytes()).unwrap();
+			},
+			OwnedMessage::Binary(data) => {
+
+				if data.len() == 6{
+
+					if data[0] == MAGIC_FLAG[0] && data[1] == MAGIC_FLAG[1] {
+
+						let row = makeword(data[2] , data[3]);
+						let col = makeword(data[4] , data[5]);
+
+						proc.resize(col as i16 , row as i16).unwrap();
+						continue;
+					}
 				}
-			}
-		});
+				ptyin.write_all(data.as_slice()).unwrap();
+			},
+			_ => {},
+		}
 	}
 }
