@@ -39,7 +39,13 @@ then build a reverse connection
 
 # Example
 
+## Linux
+
 ![image]( https://github.com/b23r0/Cliws/blob/main/example/cliws-vim.gif)
+
+## Windows(Reverse Mode)
+
+![image]( https://github.com/b23r0/Cliws/blob/main/example/cliws-windows.gif)
 
 # Reference
 
