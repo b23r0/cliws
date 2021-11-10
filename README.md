@@ -17,7 +17,7 @@ Lightweight bind/reverse PTY shell with Windows&Linux support implementation by 
 
 # Install
 
-`$> cargo install cliws
+`$> cargo install cliws`
 
 # Usage
 
