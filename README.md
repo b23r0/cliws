@@ -1,4 +1,4 @@
-# Cliws [![Build Status](https://app.travis-ci.com/b23r0/Cliws.svg?branch=main)](https://app.travis-ci.com/b23r0/Cliws) [![ChatOnDiscord](https://img.shields.io/badge/chat-on%20discord-blue)](https://discord.gg/ZKtYMvDFN4) [![LastCommit](https://img.shields.io/github/last-commit/b23r0/cliws)](https://github.com/b23r0/Cliws/) 
+# Cliws [![Build Status](https://app.travis-ci.com/b23r0/Cliws.svg?branch=main)](https://app.travis-ci.com/b23r0/Cliws) [![ChatOnDiscord](https://img.shields.io/badge/chat-on%20discord-blue)](https://discord.gg/ZKtYMvDFN4) [![LastCommit](https://img.shields.io/github/last-commit/b23r0/cliws)](https://github.com/b23r0/Cliws/) [![Crate](https://img.shields.io/crates/v/cliws)](https://crates.io/crates/cliws)
 Lightweight bind/reverse PTY shell with Windows&Linux support implementation by Rust.
 
 # Features
@@ -14,6 +14,10 @@ Lightweight bind/reverse PTY shell with Windows&Linux support implementation by 
 `$> cargo build --release`
 
 `$> ./target/release/cliws`
+
+# Install
+
+`$> cargo install cliws
 
 # Usage
 
