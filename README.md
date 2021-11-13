@@ -15,7 +15,7 @@ Lightweight bind/reverse PTY shell with Windows&Linux support implementation by 
 
 `$> ./target/release/cliws`
 
-# Install
+# Installation
 
 `$> cargo install cliws`
 
