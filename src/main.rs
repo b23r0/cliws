@@ -44,7 +44,7 @@ fn main() {
 			};
 
 			rbind(port);
-			return;
+			
 		},
 		"-r" => {
 			let address = match std::env::args().nth(2) {
@@ -70,7 +70,7 @@ fn main() {
 				fullargs.push(s);
 			}
 			rconnect(address, subprocess, fullargs);
-			return;
+			
 		},
 		"-c" => {
 			let connect_addr = match std::env::args().nth(2) {
@@ -81,7 +81,7 @@ fn main() {
 				Some(p) => p
 			};
 			connect(connect_addr);
-			return;
+			
 		},
 		"-p" => {
 			let port = match std::env::args().nth(2) {
@@ -107,12 +107,12 @@ fn main() {
 				fullargs.push(s);
 			}
 			bind(port, subprocess, fullargs);
-			return;
+			
 		},
 
 		_ => {
 			usage();
-			return;
+			
 		}
 	}
 }

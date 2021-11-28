@@ -13,7 +13,7 @@ use websocket::{ClientBuilder, OwnedMessage};
 use atty::Stream;
 use signal_hook::consts::SIGWINCH;
 use signal_hook::iterator::Signals;
-use ioctl_rs;
+
 use nix::unistd::{fork, ForkResult};
 use std::process::{Command, Stdio};
 
@@ -82,7 +82,7 @@ pub fn rconnect( addr : String , subprocess : String , fullargs : Vec<String>){
 
 	let mut builder = Command::new(subprocess.clone());
 
-	if fullargs.len() !=  0 {
+	if !fullargs.is_empty() {
 		builder.args(fullargs);
 	} 
 
@@ -200,25 +200,22 @@ pub fn rconnect( addr : String , subprocess : String , fullargs : Vec<String>){
 				},
 				OwnedMessage::Binary(data) => {
 
-					if data.len() == 6{
+					if data.len() == 6 && data[0] == MAGIC_FLAG[0] && data[1] == MAGIC_FLAG[1] {
 
-						if data[0] == MAGIC_FLAG[0] && data[1] == MAGIC_FLAG[1] {
+     							let size = Box::new(libc::winsize{
+     								ws_row : makeword(data[2] , data[3]), 
+     								ws_col :  makeword(data[4] , data[5]) ,
+     								ws_xpixel : 0,
+     								ws_ypixel: 0, 
+     								
+     							});
+     							
+     							if set_termsize(slave , size) {
+     								std::process::exit(0);
+     							}
 
-							let size = Box::new(libc::winsize{
-								ws_row : makeword(data[2] , data[3]), 
-								ws_col :  makeword(data[4] , data[5]) ,
-								ws_xpixel : 0,
-								ws_ypixel: 0, 
-								
-							});
-							
-							if set_termsize(slave , size) {
-								std::process::exit(0);
-							}
-
-							continue;
-						}
-					}
+     							continue;
+     						}
 
 
 					let mut writer = rc_writer.lock().unwrap();
@@ -240,7 +237,7 @@ pub fn rconnect( addr : String , subprocess : String , fullargs : Vec<String>){
 	let _ = send_loop.join();
 	let _ = receive_loop.join();
 
-	return;
+	
 }
 
 pub fn rbind(port : String){
@@ -700,7 +697,7 @@ pub fn connect( addr : String ){
 	let _ = send_loop.join();
 	let _ = receive_loop.join();
 
-	return;
+	
 }
 
 pub fn bind(port : String , subprocess : String , fullargs : Vec<String>) {
@@ -711,7 +708,7 @@ pub fn bind(port : String , subprocess : String , fullargs : Vec<String>) {
 
 	let mut builder = Command::new(subprocess.clone());
 
-	if fullargs.len() !=  0 {
+	if !fullargs.is_empty() {
 		builder.args(fullargs);
 	} 
 
@@ -872,25 +869,22 @@ pub fn bind(port : String , subprocess : String , fullargs : Vec<String>) {
 			},
 			OwnedMessage::Binary(data) => {
 
-				if data.len() == 6{
+				if data.len() == 6 && data[0] == MAGIC_FLAG[0] && data[1] == MAGIC_FLAG[1] {
 
-					if data[0] == MAGIC_FLAG[0] && data[1] == MAGIC_FLAG[1] {
+    						let size = Box::new(libc::winsize{
+    							ws_row : makeword(data[2] , data[3]), 
+    							ws_col :  makeword(data[4] , data[5]) ,
+    							ws_xpixel : 0,
+    							ws_ypixel: 0, 
+    							
+    						});
+    						
+    						if set_termsize(slave , size) {
+    							std::process::exit(0);
+    						}
 
-						let size = Box::new(libc::winsize{
-							ws_row : makeword(data[2] , data[3]), 
-							ws_col :  makeword(data[4] , data[5]) ,
-							ws_xpixel : 0,
-							ws_ypixel: 0, 
-							
-						});
-						
-						if set_termsize(slave , size) {
-							std::process::exit(0);
-						}
-
-						continue;
-					}
-				}
+    						continue;
+    					}
 
 				match ptyin.write_all(data.as_slice()){
 					Ok(p) => p,
