@@ -1,6 +1,8 @@
 use log::LevelFilter;
 use simple_logger::SimpleLogger;
 
+mod utils;
+
 #[cfg(target_os = "linux")]
 mod xnix;
 #[cfg(target_os = "linux")]
@@ -9,8 +11,6 @@ use xnix::{bind , connect ,rbind ,rconnect };
 mod win;
 #[cfg(target_os = "windows")]
 use win::{bind , connect ,rbind ,rconnect };
-
-mod utils;
 
 fn usage () {
 	println!("Cliws - Lightweight interactive bind/reverse PTY shell");
