@@ -174,17 +174,14 @@ pub fn rconnect( addr : String , subprocess : String , fullargs : Vec<String>){
 			},
 			OwnedMessage::Binary(data) => {
 
-				if data.len() == 6{
+				if data.len() == 6 && data[0] == MAGIC_FLAG[0] && data[1] == MAGIC_FLAG[1] {
 
-					if data[0] == MAGIC_FLAG[0] && data[1] == MAGIC_FLAG[1] {
+    						let row = makeword(data[2] , data[3]);
+    						let col = makeword(data[4] , data[5]);
 
-						let row = makeword(data[2] , data[3]);
-						let col = makeword(data[4] , data[5]);
-
-						proc.resize(col as i16 , row as i16).unwrap();
-						continue;
-					}
-				}
+    						proc.resize(col as i16 , row as i16).unwrap();
+    						continue;
+    					}
 
 				match ptyin.write_all(data.as_slice()) {
 					Err(e) => {
@@ -200,7 +197,7 @@ pub fn rconnect( addr : String , subprocess : String , fullargs : Vec<String>){
 		}
 	}
 
-	return;
+	
 }
 
 pub fn rbind(port : String){
@@ -257,7 +254,7 @@ pub fn rbind(port : String){
 	let slck_2 = slck_1.clone();
 	let slck_3 = slck_1.clone();
 	
-	let mut mode = 0 as u32;
+	let mut mode = 0_u32;
 	
 	let ret = unsafe { GetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE), &mut mode)};
 
@@ -422,7 +419,7 @@ pub fn connect( addr : String ){
 		Ok(p) => p
 	};
 
-	let mut mode = 0 as u32;
+	let mut mode = 0_u32;
 	
 	let ret = unsafe { GetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE), &mut mode)};
 
@@ -606,7 +603,7 @@ pub fn connect( addr : String ){
 	let _ = send_loop.join();
 	let _ = receive_loop.join();
 
-	return;
+	
 }
 
 pub fn bind(port : String , subprocess : String , fullargs : Vec<String>) {
@@ -765,23 +762,20 @@ pub fn bind(port : String , subprocess : String , fullargs : Vec<String>) {
 			},
 			OwnedMessage::Binary(data) => {
 
-				if data.len() == 6{
+				if data.len() == 6 && data[0] == MAGIC_FLAG[0] && data[1] == MAGIC_FLAG[1] {
 
-					if data[0] == MAGIC_FLAG[0] && data[1] == MAGIC_FLAG[1] {
+    						let row = makeword(data[2] , data[3]);
+    						let col = makeword(data[4] , data[5]);
 
-						let row = makeword(data[2] , data[3]);
-						let col = makeword(data[4] , data[5]);
-
-						match proc.resize(col as i16 , row as i16){
-							Err(e) => {
-								log::error!("error : {}" , e);
-								std::process::exit(0);
-							},
-							Ok(p) => p
-						};
-						continue;
-					}
-				}
+    						match proc.resize(col as i16 , row as i16){
+    							Err(e) => {
+    								log::error!("error : {}" , e);
+    								std::process::exit(0);
+    							},
+    							Ok(p) => p
+    						};
+    						continue;
+    					}
 				match ptyin.write_all(data.as_slice()){
 					Err(e) => {
 						log::error!("error : {}" , e);
