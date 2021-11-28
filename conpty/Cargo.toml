@@ -1,0 +1,19 @@
+[package]
+name = "conpty"
+version = "0.2.1"
+edition = "2018"
+authors = ["Maxim Zhiburt <zhiburt@gmail.com>"]
+description = "A library which provides an interface for ConPTY"
+repository = "https://github.com/zhiburt/conpty"
+homepage = "https://github.com/zhiburt/conpty"
+documentation = "https://docs.rs/conpty"
+license = "MIT"
+categories = ["os", "os::windows-apis"]
+keywords = ["win32", "ConPTY", "shell", "expect", "expectrl"]
+readme = "README.md"
+
+[dependencies]
+windows = "0.19.0"
+
+[build-dependencies]
+windows = "0.19.0"

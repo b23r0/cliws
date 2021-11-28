@@ -36,20 +36,46 @@ pub fn rconnect( addr : String , subprocess : String , fullargs : Vec<String>){
 		Ok(p) => p
 	};
 
-	let (mut receiver, mut sender) = client.split().unwrap();
+	let (mut receiver, mut sender) = match client.split() {
+		Err(e) => {
+			log::error!("error : {}" , e);
+			return;
+		},
+		Ok(p) => p
+	};
+
 	let (tx, rx) = channel();
 
 	let tx_1 = tx.clone();
 
-	let full_cmd = subprocess + fullargs.join(" ").as_str();
+	let full_cmd = format!("{} {}" ,subprocess , fullargs.join(" ").as_str());
 
 	log::info!("start process: [{}]" ,full_cmd );
 
-	let proc = conpty::spawn(full_cmd).unwrap();
+	let proc = match conpty::spawn(full_cmd) {
+		Err(e) => {
+			log::error!("error : {}" , e);
+			return;
+		},
+		Ok(p) => p
+	};
+
 	let pid = proc.pid();
 
-	let mut ptyin = proc.input().unwrap();
-	let mut ptyout = proc.output().unwrap();
+	let mut ptyin = match proc.input() {
+		Err(e) => {
+			log::error!("error : {}" , e);
+			return;
+		},
+		Ok(p) => p
+	};
+	let mut ptyout = match proc.output()  {
+		Err(e) => {
+			log::error!("error : {}" , e);
+			return;
+		},
+		Ok(p) => p
+	};
 
 	thread::spawn(move || {
 		let handle = unsafe { OpenProcess(PROCESS_ALL_ACCESS, 0, pid) };
@@ -68,7 +94,13 @@ pub fn rconnect( addr : String , subprocess : String , fullargs : Vec<String>){
 		loop {
 
 			let result = ptyout.read(buf.as_mut());
-			let size = result.unwrap();	
+			let size = match result {
+				Err(e) => {
+					log::error!("error : {}" , e);
+					std::process::exit(0);
+				},
+				Ok(p) => p
+			};
 
 			
 			if size == 0 {
@@ -131,7 +163,13 @@ pub fn rconnect( addr : String , subprocess : String , fullargs : Vec<String>){
 				let _ = tx_1.send(OwnedMessage::Pong(message));
 			},
 			OwnedMessage::Text(text) => {
-				ptyin.write_all(text.as_bytes()).unwrap();
+				match ptyin.write_all(text.as_bytes()) {
+					Err(e) => {
+						log::error!("error : {}" , e);
+						std::process::exit(0);
+					},
+					Ok(p) => p
+				};
 				
 			},
 			OwnedMessage::Binary(data) => {
@@ -148,7 +186,13 @@ pub fn rconnect( addr : String , subprocess : String , fullargs : Vec<String>){
 					}
 				}
 
-				ptyin.write_all(data.as_slice()).unwrap();
+				match ptyin.write_all(data.as_slice()) {
+					Err(e) => {
+						log::error!("error : {}" , e);
+						std::process::exit(0);
+					},
+					Ok(p) => p
+				};
 			},
 			OwnedMessage::Pong(_) => {
 				//let _ = tx_1.send(OwnedMessage::Ping([0].to_vec()));
@@ -158,6 +202,7 @@ pub fn rconnect( addr : String , subprocess : String , fullargs : Vec<String>){
 
 	return;
 }
+
 pub fn rbind(port : String){
 
 	log::info!("listen to: [{}:{}]" ,"0.0.0.0" , port );
@@ -171,15 +216,41 @@ pub fn rbind(port : String){
 		Ok(p) => p
 	};
 
-	let request = server.accept().unwrap();
-	let client = request.accept().unwrap();
+	let request = match server.accept(){
+		Ok(p) => p,
+		Err(e) => {
+			log::error!("error : {}" , e.error);
+			return;
+		},
+	};
+	let client = match request.accept(){
+		Ok(p) => p,
+		Err(e) => {
+			log::error!("error : {}" , e.1);
+			return;
+		},
+	};
 
-	let port = client.peer_addr().unwrap().port();
-	let ip = client.peer_addr().unwrap().ip();
+	let addr = match client.peer_addr(){
+		Ok(p) => p,
+		Err(e) => {
+			log::error!("error : {}" , e);
+			return;
+		},
+	};
+
+	let ip = addr.ip();
+	let port = addr.port();
 
 	log::info!("accept from : [{}:{}]" ,ip , port );
 
-	let (mut receiver, sender) = client.split().unwrap();
+	let (mut receiver, sender) = match client.split(){
+		Ok(p) => p,
+		Err(e) => {
+			log::error!("error : {}" , e);
+			return;
+		},
+	};
 	
 
 	let slck_1 = Arc::new(Mutex::new(sender));
@@ -196,8 +267,20 @@ pub fn rbind(port : String){
 	}
 	
 
-	let console = console::Console::current().unwrap();
-	console.set_raw().unwrap();
+	let console = match console::Console::current() {
+		Err(e) => {
+			log::error!("error : {}" , e);
+			return;
+		},
+		Ok(p) => p
+	};
+	match console.set_raw() {
+		Err(e) => {
+			log::error!("error : {}" , e);
+			return;
+		},
+		Ok(p) => p
+	};
 
 	thread::spawn(move || {
 
@@ -206,14 +289,26 @@ pub fn rbind(port : String){
 		loop{
 			
 			let mut buf : [u8;1] = [0];
-			let size = fin.read(buf.as_mut()).unwrap();
+			let size = match fin.read(buf.as_mut()){
+				Ok(p) => p,
+				Err(e) => {
+					log::error!("error : {}" , e);
+					std::process::exit(0);
+				},
+			};
 
 			if size == 0 {
 				break;
 			}
 
 			let msg = OwnedMessage::Binary(buf.to_vec());
-			slck_2.lock().unwrap().send_message(&msg).unwrap();
+			match slck_2.lock().unwrap().send_message(&msg) {
+				Err(e) => {
+					log::error!("error : {}" , e);
+					std::process::exit(0);
+				},
+				Ok(p) => p
+			};
 		}
 	});
 
@@ -241,7 +336,13 @@ pub fn rbind(port : String){
 				let vec = [MAGIC_FLAG[0], MAGIC_FLAG[1] , bottom1 , bottom2 , right1 , right2 ];
 				
 				let msg = OwnedMessage::Binary(vec.to_vec());
-				slck_3.lock().unwrap().send_message(&msg).unwrap();
+				match slck_3.lock().unwrap().send_message(&msg) {
+					Err(e) => {
+						log::error!("error : {}" , e);
+						std::process::exit(0);
+					},
+					Ok(p) => p
+				};
 
 				row = csbi.srWindow.Bottom;
 				col = csbi.srWindow.Right;
@@ -272,14 +373,32 @@ pub fn rbind(port : String){
 			},
 			OwnedMessage::Ping(ping) => {
 				let message = OwnedMessage::Pong(ping);
-				slck_1.lock().unwrap().send_message(&message).unwrap();
+				match slck_1.lock().unwrap().send_message(&message){
+					Err(e) => {
+						log::error!("error : {}" , e);
+						std::process::exit(0);
+					},
+					Ok(p) => p
+				};
 			},
 			OwnedMessage::Text(text) => {
-				out.write_all(text.as_bytes()).unwrap();
+				match out.write_all(text.as_bytes()){
+					Err(e) => {
+						log::error!("error : {}" , e);
+						std::process::exit(0);
+					},
+					Ok(p) => p
+				};
 				
 			},
 			OwnedMessage::Binary(data) => {
-				out.write_all(data.as_slice()).unwrap();
+				match out.write_all(data.as_slice()){
+					Err(e) => {
+						log::error!("error : {}" , e);
+						std::process::exit(0);
+					},
+					Ok(p) => p
+				};
 			},
 			_ => {},
 		}
@@ -313,10 +432,29 @@ pub fn connect( addr : String ){
 	}
 	
 
-	let console = console::Console::current().unwrap();
-	console.set_raw().unwrap();
+	let console = match console::Console::current(){
+		Err(e) => {
+			log::error!("error : {}" , e);
+			return;
+		},
+		Ok(p) => p
+	};
 
-	let (mut receiver, mut sender) = client.split().unwrap();
+	match console.set_raw(){
+		Err(e) => {
+			log::error!("error : {}" , e);
+			return;
+		},
+		Ok(p) => p
+	};
+
+	let (mut receiver, mut sender) = match client.split(){
+		Err(e) => {
+			log::error!("error : {}" , e);
+			return;
+		},
+		Ok(p) => p
+	};
 
 	let (tx, rx) = channel();
 
@@ -412,10 +550,22 @@ pub fn connect( addr : String ){
 					let _ = tx_1.send(OwnedMessage::Pong(message));
 				},
 				OwnedMessage::Text(message) => {
-					out.write_all(message.as_bytes()).unwrap();
+					match out.write_all(message.as_bytes()){
+						Err(e) => {
+							log::error!("error : {}" , e);
+							std::process::exit(0);
+						},
+						Ok(p) => p
+					};
 				},
 				OwnedMessage::Binary(message) => {
-					out.write_all(message.as_slice()).unwrap();
+					match out.write_all(message.as_slice()){
+						Err(e) => {
+							log::error!("error : {}" , e);
+							std::process::exit(0);
+						},
+						Ok(p) => p
+					};
 				},
 				OwnedMessage::Pong(_) => {
 					//let _ = tx_1.send(OwnedMessage::Ping([0].to_vec()));
@@ -432,7 +582,13 @@ pub fn connect( addr : String ){
 	loop{
 		
 		let mut buf : [u8;1] = [0];
-		let size = input.read(buf.as_mut()).unwrap();
+		let size = match input.read(buf.as_mut()){
+			Err(e) => {
+				log::error!("error : {}" , e);
+				return;
+			},
+			Ok(p) => p
+		};
 
 		if size == 0 {
 			break;
@@ -455,13 +611,25 @@ pub fn connect( addr : String ){
 
 pub fn bind(port : String , subprocess : String , fullargs : Vec<String>) {
 
-	let full_cmd = subprocess + fullargs.join(" ").as_str();
+	let full_cmd = format!("{} {}" ,subprocess , fullargs.join(" ").as_str());
 
 	let proc = conpty::spawn(full_cmd).unwrap();
 	let pid = proc.pid();
 
-	let mut ptyin = proc.input().unwrap();
-	let mut ptyout = proc.output().unwrap();
+	let mut ptyin = match proc.input(){
+		Err(e) => {
+			log::error!("error : {}" , e);
+			return;
+		},
+		Ok(p) => p
+	};
+	let mut ptyout = match proc.output(){
+		Err(e) => {
+			log::error!("error : {}" , e);
+			return;
+		},
+		Ok(p) => p
+	};
 
 	thread::spawn(move || {
 		let handle = unsafe { OpenProcess(PROCESS_ALL_ACCESS, 0, pid) };
@@ -490,11 +658,18 @@ pub fn bind(port : String , subprocess : String , fullargs : Vec<String>) {
 		loop {
 
 			let result = ptyout.read(buf.as_mut());
-			let size = result.unwrap();	
-
-			if size == 0{
-				std::process::exit(0);
-			}
+			let size = match result {
+				Ok(p) => {
+					if p == 0{
+						std::process::exit(0);
+					}
+					p
+				},
+				Err(e) => {
+					log::error!("error : {}" , e);
+					std::process::exit(0);
+				},
+			};
 
 			{ history_lck2.lock().unwrap().append(buf[..size].to_vec().as_mut()); }
 			
@@ -524,11 +699,31 @@ pub fn bind(port : String , subprocess : String , fullargs : Vec<String>) {
 		Ok(p) => p
 	};
 
-	let request = server.accept().unwrap();
-	let client = request.accept().unwrap();
+	let request = match server.accept(){
+		Err(e) => {
+			log::error!("error : {}" , e.error);
+			return;
+		},
+		Ok(p) => p
+	};
+	let client = match request.accept(){
+		Ok(p) => p,
+		Err(e) => {
+			log::error!("error : {}" , e.1);
+			return;
+		},
+	};
 
-	let port = client.peer_addr().unwrap().port();
-	let ip = client.peer_addr().unwrap().ip();
+	let addr = match client.peer_addr(){
+		Ok(p) => p,
+		Err(e) => {
+			log::error!("error : {}" , e);
+			return;
+		},
+	};
+
+	let ip = addr.ip();
+	let port = addr.port();
 
 	log::info!("accept from : [{}:{}]" ,ip , port );
 
@@ -577,11 +772,23 @@ pub fn bind(port : String , subprocess : String , fullargs : Vec<String>) {
 						let row = makeword(data[2] , data[3]);
 						let col = makeword(data[4] , data[5]);
 
-						proc.resize(col as i16 , row as i16).unwrap();
+						match proc.resize(col as i16 , row as i16){
+							Err(e) => {
+								log::error!("error : {}" , e);
+								std::process::exit(0);
+							},
+							Ok(p) => p
+						};
 						continue;
 					}
 				}
-				ptyin.write_all(data.as_slice()).unwrap();
+				match ptyin.write_all(data.as_slice()){
+					Err(e) => {
+						log::error!("error : {}" , e);
+						std::process::exit(0);
+					},
+					Ok(p) => p
+				};
 			},
 			_ => {},
 		}

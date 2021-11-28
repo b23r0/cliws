@@ -11,7 +11,7 @@ mod win;
 use win::{bind , connect ,rbind ,rconnect };
 
 fn usage () {
-	println!("Cliws - Lightweight bind/reverse PTY shell implementation by Rust");
+	println!("Cliws - Lightweight interactive bind/reverse PTY shell");
 	println!("https://github.com/b23r0/Cliws");
 	println!("Usage: cliws [-p listen port] [-c ws address] [-l reverse port] [-r reverse addr] [command]");
 }
