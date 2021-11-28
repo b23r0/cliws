@@ -26,6 +26,12 @@ ntapi = "0.3.6"
 winapi = { version = "0.3.9", features = ["namedpipeapi","synchapi"] }
 conpty = {path = "conpty"}
 
+[profile.release]
+# strip = true  # Automatically strip symbols from the binary.
+opt-level = "z"  # Optimize for size.
+lto = true
+codegen-units = 1
+
 #[features]
 #vendored = ["openssl-sys/vendored"]
 # cargo build --target=x86_64-unknown-linux-musl --features vendored --release
