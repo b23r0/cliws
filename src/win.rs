@@ -1,5 +1,3 @@
-include!("utils.rs");
-
 use conpty::{console};
 use winapi::um::wincon::{CONSOLE_SCREEN_BUFFER_INFO, GetConsoleScreenBufferInfo};
 use std::collections::HashMap;
@@ -17,6 +15,8 @@ use winapi::um::processenv::{GetStdHandle};
 use winapi::um::winbase::{INFINITE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE};
 use winapi::um::winnt::{ PROCESS_ALL_ACCESS};
 use winapi::um::synchapi::WaitForSingleObject;
+
+use crate::utils::{MAGIC_FLAG, makeword, splitword};
 
 pub fn rconnect( addr : String , subprocess : String , fullargs : Vec<String>){
 

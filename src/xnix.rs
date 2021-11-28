@@ -1,5 +1,3 @@
-include!("utils.rs");
-
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{Read, Write};
@@ -18,6 +16,8 @@ use signal_hook::iterator::Signals;
 use ioctl_rs;
 use nix::unistd::{fork, ForkResult};
 use std::process::{Command, Stdio};
+
+use crate::utils::{MAGIC_FLAG, makeword, splitword};
 
 pub fn get_termsize(fd : i32) -> Option<Box<libc::winsize>> {
 	let mut ret = 0;
@@ -65,7 +65,13 @@ pub fn rconnect( addr : String , subprocess : String , fullargs : Vec<String>){
 		Ok(p) => p
 	};
 
-	let (mut receiver, mut sender) = client.split().unwrap();
+	let (mut receiver, mut sender) = match client.split(){
+		Ok(p) => p,
+		Err(e) => {
+			log::error!("error : {}" , e);
+			return;
+		}
+	};
 	let (tx, rx) = channel();
 
 	let tx_1 = tx.clone();
@@ -183,7 +189,13 @@ pub fn rconnect( addr : String , subprocess : String , fullargs : Vec<String>){
 				},
 				OwnedMessage::Text(text) => {
 					let mut writer = rc_writer.lock().unwrap();
-					writer.write_all(text.as_bytes()).unwrap();
+					match writer.write_all(text.as_bytes()){
+						Ok(p) => p,
+						Err(e) => {
+							log::error!("error : {}" , e);
+							std::process::exit(0);
+						}
+					};
 					
 				},
 				OwnedMessage::Binary(data) => {
@@ -210,7 +222,13 @@ pub fn rconnect( addr : String , subprocess : String , fullargs : Vec<String>){
 
 
 					let mut writer = rc_writer.lock().unwrap();
-					writer.write_all(data.as_slice()).unwrap();
+					match writer.write_all(data.as_slice()){
+						Ok(_) => {},
+						Err(e) => {
+							log::error!("error : {}" , e);
+							return;
+						}
+					};
 				},
 				OwnedMessage::Pong(_) => {
 					//let _ = tx_1.send(OwnedMessage::Ping([0].to_vec()));
@@ -240,15 +258,41 @@ pub fn rbind(port : String){
 		Ok(p) => p
 	};
 
-	let request = server.accept().unwrap();
-	let client = request.accept().unwrap();
+	let request = match server.accept(){
+		Ok(p) => p,
+		Err(e) => {
+			log::error!("error : {}" , e.error);
+			return;
+		},
+	};
+	let client = match request.accept(){
+		Ok(p) => p,
+		Err(e) => {
+			log::error!("error : {}" , e.1);
+			return;
+		},
+	};
 
-	let port = client.peer_addr().unwrap().port();
-	let ip = client.peer_addr().unwrap().ip();
+	let addr = match client.peer_addr(){
+		Ok(p) => p,
+		Err(e) => {
+			log::error!("error : {}" , e);
+			return;
+		},
+	};
+
+	let ip = addr.ip();
+	let port = addr.port();
 
 	log::info!("accept from : [{}:{}]" ,ip , port );
 
-	let (mut receiver, sender) = client.split().unwrap();
+	let (mut receiver, sender) = match client.split(){
+		Ok(p) => p,
+		Err(e) => {
+			log::error!("error : {}" , e);
+			return;
+		},
+	};
 	
 
 	let slck = Arc::new(Mutex::new(sender));
@@ -257,7 +301,13 @@ pub fn rbind(port : String){
 	
 	if atty::is(Stream::Stdin) {
 
-		let mut flags = termios::tcgetattr(STDIN_FILENO).unwrap();
+		let mut flags = match termios::tcgetattr(STDIN_FILENO){
+			Ok(p) => p,
+			Err(e) => {
+				log::error!("error : {}" , e);
+				return;
+			},
+		};
 
 		flags.input_flags |= termios::InputFlags::IGNPAR;
 		flags.input_flags &= !{termios::InputFlags::ISTRIP|termios::InputFlags::INLCR|termios::InputFlags::IGNCR|termios::InputFlags::ICRNL|termios::InputFlags::IXON|termios::InputFlags::IXANY|termios::InputFlags::IXOFF};
@@ -266,10 +316,22 @@ pub fn rbind(port : String){
 		flags.control_chars[nix::libc::VMIN] = 1;
 		flags.control_chars[nix::libc::VTIME] = 0;
 
-		termios::tcsetattr(STDIN_FILENO, termios::SetArg::TCSANOW, &flags).unwrap();
+		match termios::tcsetattr(STDIN_FILENO, termios::SetArg::TCSANOW, &flags){
+			Ok(p) => p,
+			Err(e) => {
+				log::error!("error : {}" , e);
+				return;
+			},
+		};
 	}
 
-	let mut signals = Signals::new(&[SIGWINCH]).unwrap();
+	let mut signals = match Signals::new(&[SIGWINCH]){
+		Ok(p) => p,
+		Err(e) => {
+			log::error!("error : {}" , e);
+			return;
+		},
+	};
 
 	thread::spawn(move || {
 
@@ -277,7 +339,13 @@ pub fn rbind(port : String){
 
 			if sig == SIGWINCH {
 
-				let size = get_termsize(0).unwrap();
+				let size = match get_termsize(0){
+					Some(p) => p,
+					None => {
+						log::error!("get termsize error");
+						std::process::exit(0);
+					},
+				};
 
 				let (ws_row1 ,ws_row2) = splitword(size.ws_row);
 				let (ws_col1 ,ws_col2) = splitword(size.ws_col);
@@ -285,21 +353,39 @@ pub fn rbind(port : String){
 				let vec = [MAGIC_FLAG[0], MAGIC_FLAG[1] , ws_row1 ,ws_row2 , ws_col1 ,ws_col2 ];
 
 				let msg = OwnedMessage::Binary(vec.to_vec());
-				slck.lock().unwrap().send_message(&msg).unwrap();
+				match slck.lock().unwrap().send_message(&msg){
+					Ok(p) => p,
+					Err(e) => {
+						log::error!("error : {}" , e);
+						std::process::exit(0);
+					},
+				};
 			}
 		}
 	});
 
 	thread::spawn(move || {
 		// first set terminal size
-		let size = get_termsize(0).unwrap();
+		let size = match get_termsize(0){
+			Some(p) => p,
+			None => {
+				log::error!("get termsize error");
+				std::process::exit(0);
+			},
+		};
 		let (ws_row1 ,ws_row2) = splitword(size.ws_row);
 		let (ws_col1 ,ws_col2) = splitword(size.ws_col);
 
 		let vec = [MAGIC_FLAG[0], MAGIC_FLAG[1] , ws_row1 ,ws_row2 , ws_col1 ,ws_col2 ];
 		let msg = OwnedMessage::Binary(vec.to_vec());
 		{
-			slck_1.lock().unwrap().send_message(&msg).unwrap();
+			match slck_1.lock().unwrap().send_message(&msg){
+				Ok(p) => p,
+				Err(e) => {
+					log::error!("error : {}" , e);
+					std::process::exit(0);
+				},
+			};
 		}
 
 		let mut fin = unsafe {File::from_raw_fd(0)};
@@ -307,14 +393,26 @@ pub fn rbind(port : String){
 		loop{
 			
 			let mut buf : [u8;1] = [0];
-			let size = fin.read(buf.as_mut()).unwrap();
+			let size = match fin.read(buf.as_mut()){
+				Ok(p) => p,
+				Err(e) => {
+					log::error!("error : {}" , e);
+					std::process::exit(0);
+				},
+			};
 
 			if size == 0 {
 				break;
 			}
 
 			let msg = OwnedMessage::Binary(buf.to_vec());
-			slck_1.lock().unwrap().send_message(&msg).unwrap();
+			match slck_1.lock().unwrap().send_message(&msg){
+				Ok(p) => p,
+				Err(e) => {
+					log::error!("error : {}" , e);
+					std::process::exit(0);
+				},
+			};
 		}
 	});
 
@@ -325,7 +423,13 @@ pub fn rbind(port : String){
 		let message = match message {
 			Ok(p) => p,
 			Err(_) => {
-				termios::tcsetattr(STDIN_FILENO, termios::SetArg::TCSANOW, &bakflag).unwrap();
+				match termios::tcsetattr(STDIN_FILENO, termios::SetArg::TCSANOW, &bakflag){
+					Ok(p) => p,
+					Err(e) => {
+						log::error!("error : {}" , e);
+						return;
+					},
+				};
 				log::warn!("client closed : [{}:{}]" ,ip , port );
 				std::process::exit(0);
 			},
@@ -333,20 +437,44 @@ pub fn rbind(port : String){
 		
 		match message {
 			OwnedMessage::Close(_) => {
-				termios::tcsetattr(STDIN_FILENO, termios::SetArg::TCSANOW, &bakflag).unwrap();
+				match termios::tcsetattr(STDIN_FILENO, termios::SetArg::TCSANOW, &bakflag){
+					Ok(p) => p,
+					Err(e) => {
+						log::error!("error : {}" , e);
+						std::process::exit(0);
+					},
+				};
 				log::warn!("client closed : [{}:{}]" ,ip , port );
 				std::process::exit(0);
 			},
 			OwnedMessage::Ping(ping) => {
 				let message = OwnedMessage::Pong(ping);
-				slck_2.lock().unwrap().send_message(&message).unwrap();
+				match slck_2.lock().unwrap().send_message(&message){
+					Ok(p) => p,
+					Err(e) => {
+						log::error!("error : {}" , e);
+						std::process::exit(0);
+					},
+				};
 			},
 			OwnedMessage::Text(text) => {
-				out.write_all(text.as_bytes()).unwrap();
+				match out.write_all(text.as_bytes()){
+					Ok(p) => p,
+					Err(e) => {
+						log::error!("error : {}" , e);
+						std::process::exit(0);
+					},
+				};
 				
 			},
 			OwnedMessage::Binary(data) => {
-				out.write_all(data.as_slice()).unwrap();
+				match out.write_all(data.as_slice()){
+					Ok(p) => p,
+					Err(e) => {
+						log::error!("error : {}" , e);
+						std::process::exit(0);
+					},
+				};
 			},
 			_ => {},
 		}
@@ -355,7 +483,13 @@ pub fn rbind(port : String){
 
 pub fn connect( addr : String ){
 
-	let bakflag = termios::tcgetattr(STDOUT_FILENO).unwrap();
+	let bakflag = match termios::tcgetattr(STDOUT_FILENO){
+		Ok(p) => p,
+		Err(e) => {
+			log::error!("error : {}" , e);
+			return;
+		},
+	};
 
 	let client = match  { 
 		match ClientBuilder::new(addr.as_str()){
@@ -373,7 +507,13 @@ pub fn connect( addr : String ){
 		Ok(p) => p
 	};
 
-	let (mut receiver, mut sender) = client.split().unwrap();
+	let (mut receiver, mut sender) = match client.split(){
+		Ok(p) => p,
+		Err(e) => {
+			log::error!("error : {}" , e);
+			return;
+		},
+	};
 
 	let (tx, rx) = channel();
 
@@ -389,7 +529,13 @@ pub fn connect( addr : String ){
 			};
 			match message {
 				OwnedMessage::Close(_) => {
-					termios::tcsetattr(STDIN_FILENO, termios::SetArg::TCSANOW, &bakflag).unwrap();
+					match termios::tcsetattr(STDIN_FILENO, termios::SetArg::TCSANOW, &bakflag){
+						Ok(p) => p,
+						Err(e) => {
+							log::error!("error : {}" , e);
+							std::process::exit(0);
+						},
+					};
 					std::process::exit(0);
 				},
 				OwnedMessage::Binary(_) => {
@@ -428,10 +574,22 @@ pub fn connect( addr : String ){
 					let _ = tx_1.send(OwnedMessage::Pong(message));
 				},
 				OwnedMessage::Text(message) => {
-					out.write_all(message.as_bytes()).unwrap();
+					match out.write_all(message.as_bytes()){
+						Ok(p) => p,
+						Err(e) => {
+							log::error!("error : {}" , e);
+							std::process::exit(0);
+						},
+					};
 				},
 				OwnedMessage::Binary(message) => {
-					out.write_all(message.as_slice()).unwrap();
+					match out.write_all(message.as_slice()){
+						Ok(p) => p,
+						Err(e) => {
+							log::error!("error : {}" , e);
+							std::process::exit(0);
+						},
+					};
 				},
 				OwnedMessage::Pong(_) => {
 					//let _ = tx_1.send(OwnedMessage::Ping([0].to_vec()));
@@ -440,7 +598,13 @@ pub fn connect( addr : String ){
 		}
 	});
 
-	let mut signals = Signals::new(&[SIGWINCH]).unwrap();
+	let mut signals = match Signals::new(&[SIGWINCH]){
+		Ok(p) => p,
+		Err(e) => {
+			log::error!("error : {}" , e);
+			std::process::exit(0);
+		},
+	};
 
 	thread::spawn(move || {
 
@@ -448,7 +612,13 @@ pub fn connect( addr : String ){
 
 			if sig == SIGWINCH {
 
-				let size = get_termsize(0).unwrap();
+				let size = match get_termsize(0){
+					Some(p) => p,
+					None => {
+						log::error!("get termsize error");
+						std::process::exit(0);
+					},
+				};
 
 				let (ws_row1 ,ws_row2) = splitword(size.ws_row);
 				let (ws_col1 ,ws_col2) = splitword(size.ws_col);
@@ -468,7 +638,13 @@ pub fn connect( addr : String ){
 
 	if atty::is(Stream::Stdin) {
 
-		let mut flags = termios::tcgetattr(STDIN_FILENO).unwrap();
+		let mut flags = match termios::tcgetattr(STDIN_FILENO){
+			Ok(p) => p,
+			Err(e) => {
+				log::error!("error : {}" , e);
+				return;
+			},
+		};
 
 		flags.input_flags |= termios::InputFlags::IGNPAR;
 		flags.input_flags &= !{termios::InputFlags::ISTRIP|termios::InputFlags::INLCR|termios::InputFlags::IGNCR|termios::InputFlags::ICRNL|termios::InputFlags::IXON|termios::InputFlags::IXANY|termios::InputFlags::IXOFF};
@@ -477,7 +653,13 @@ pub fn connect( addr : String ){
 		flags.control_chars[nix::libc::VMIN] = 1;
 		flags.control_chars[nix::libc::VTIME] = 0;
 
-		termios::tcsetattr(STDIN_FILENO, termios::SetArg::TCSANOW, &flags).unwrap();
+		match termios::tcsetattr(STDIN_FILENO, termios::SetArg::TCSANOW, &flags){
+			Ok(p) => p,
+			Err(e) => {
+				log::error!("error : {}" , e);
+				return;
+			},
+		};
 	}
 	
 	// first set terminal size
@@ -494,7 +676,13 @@ pub fn connect( addr : String ){
 	loop{
 		
 		let mut buf : [u8;1] = [0];
-		let size = fin.read(buf.as_mut()).unwrap();
+		let size = match fin.read(buf.as_mut()){
+			Ok(p) => p,
+			Err(e) => {
+				log::error!("error : {}" , e);
+				return;
+			},
+		};
 
 		if size == 0 {
 			break;
@@ -605,11 +793,31 @@ pub fn bind(port : String , subprocess : String , fullargs : Vec<String>) {
 		Ok(p) => p
 	};
 
-	let request = server.accept().unwrap();
-	
-	let client = request.accept().unwrap();
-	let port = client.peer_addr().unwrap().port();
-	let ip = client.peer_addr().unwrap().ip();
+	let request = match server.accept(){
+		Ok(p) => p,
+		Err(e) => {
+			log::error!("error : {}" , e.error);
+			return;
+		},
+	};
+	let client = match request.accept(){
+		Ok(p) => p,
+		Err(e) => {
+			log::error!("error : {}" , e.1);
+			return;
+		},
+	};
+
+	let addr = match client.peer_addr(){
+		Ok(p) => p,
+		Err(e) => {
+			log::error!("error : {}" , e);
+			return;
+		},
+	};
+
+	let ip = addr.ip();
+	let port = addr.port();
 
 	log::info!("accept from : [{}:{}]" ,ip , port );
 
@@ -644,10 +852,22 @@ pub fn bind(port : String , subprocess : String , fullargs : Vec<String>) {
 			},
 			OwnedMessage::Ping(ping) => {
 				let message = OwnedMessage::Pong(ping);
-				slck.lock().unwrap().send_message(&message).unwrap();
+				match slck.lock().unwrap().send_message(&message){
+					Ok(p) => p,
+					Err(e) => {
+						log::error!("error : {}" , e);
+						std::process::exit(0);
+					},
+				};
 			},
 			OwnedMessage::Text(text) => {
-				ptyin.write_all(text.as_bytes()).unwrap();
+				match ptyin.write_all(text.as_bytes()){
+					Ok(p) => p,
+					Err(e) => {
+						log::error!("error : {}" , e);
+						std::process::exit(0);
+					},
+				};
 				
 			},
 			OwnedMessage::Binary(data) => {
@@ -672,7 +892,13 @@ pub fn bind(port : String , subprocess : String , fullargs : Vec<String>) {
 					}
 				}
 
-				ptyin.write_all(data.as_slice()).unwrap();
+				match ptyin.write_all(data.as_slice()){
+					Ok(p) => p,
+					Err(e) => {
+						log::error!("error : {}" , e);
+						std::process::exit(0);
+					},
+				};
 			},
 			_ => {},
 		}

@@ -10,6 +10,8 @@ mod win;
 #[cfg(target_os = "windows")]
 use win::{bind , connect ,rbind ,rconnect };
 
+mod utils;
+
 fn usage () {
 	println!("Cliws - Lightweight interactive bind/reverse PTY shell");
 	println!("https://github.com/b23r0/Cliws");
