@@ -51,7 +51,7 @@ then build a reverse connection
 
 ![image]( https://github.com/b23r0/Cliws/blob/main/example/cliws-windows.gif)
 
-# About Invalid Characters
+# Invalid Characters
 
 In Windows(Windows Terminal), the default `CodePage` encoding is UTF-8. When encountering the target of other language operating systems, invalid characters may occur. You can try the following methods to solve it.
 
