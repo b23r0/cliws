@@ -51,6 +51,12 @@ then build a reverse connection
 
 ![image]( https://github.com/b23r0/Cliws/blob/main/example/cliws-windows.gif)
 
+# About Invalid Characters
+
+In Windows(Windows Terminal), the default `CodePage` encoding is UTF-8. When encountering the target of other language operating systems, invalid characters may occur. You can try the following methods to solve it.
+
+Open Regedit and modified `[Machine]\HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Nls\CodePage\OEMCP` value is 65001(DEC).
+
 # Reference
 
 * https://github.com/t57root/amcsh
