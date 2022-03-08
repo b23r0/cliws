@@ -20,7 +20,7 @@ fn usage () {
 
 fn main() {
 
-	SimpleLogger::new().with_colors(true).init().unwrap();
+	SimpleLogger::new().with_utc_timestamps().with_utc_timestamps().with_colors(true).init().unwrap();
 	::log::set_max_level(LevelFilter::Info);
 
 	let arg_count = std::env::args().count();

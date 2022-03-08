@@ -11,7 +11,7 @@ keywords = ["shell", "pentest"]
 
 [dependencies]
 websocket = "0.26.2"
-simple_logger = "1.13.0"
+simple_logger = "2.1.0"
 log = "0.4.14"
 
 [target.'cfg(target_os = "linux")'.dependencies]
@@ -24,7 +24,7 @@ signal-hook = "0.3.10"
 [target.'cfg(target_os = "windows")'.dependencies]
 ntapi = "0.3.6"
 winapi = { version = "0.3.9", features = ["namedpipeapi","synchapi"] }
-conpty = "0.2.1"
+conpty = "0.3.0"
 
 [profile.release]
 # strip = true  # Automatically strip symbols from the binary.
