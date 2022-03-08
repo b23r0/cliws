@@ -1,6 +1,6 @@
 [package]
 name = "cliws"
-version = "0.2.1"
+version = "0.2.2"
 authors = ["b23r0 <b23r0@foxmail.com>"]
 edition = "2021"
 description = "Lightweight interactive bind/reverse PTY shell with Windows&Linux support implementation by Rust."
