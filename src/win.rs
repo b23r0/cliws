@@ -77,9 +77,10 @@ pub fn rconnect( addr : String , subprocess : String , fullargs : Vec<String>){
 		let handle = unsafe { OpenProcess(windows::Win32::System::Threading::PROCESS_ALL_ACCESS, false, pid) };
 
 		if handle.is_invalid() {
-			unsafe { WaitForSingleObject(handle, 0xffffffff)};
-		} else {
 			log::error!("OpenProcess error");
+			std::process::exit(0);
+		} else {
+			unsafe { WaitForSingleObject(handle, 0xffffffff)};
 		}
 		log::warn!("child process exit!");
 		std::process::exit(0);
