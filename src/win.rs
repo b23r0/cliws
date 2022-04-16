@@ -1,22 +1,18 @@
-use conpty::{console};
-use winapi::um::wincon::{CONSOLE_SCREEN_BUFFER_INFO, GetConsoleScreenBufferInfo};
+use windows::Win32::System::Threading::{OpenProcess, WaitForSingleObject};
+use windows::Win32::System::Console::{SetConsoleMode, GetConsoleMode, GetConsoleScreenBufferInfo, CONSOLE_SCREEN_BUFFER_INFO};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{Read, Write};
-use std::os::windows::prelude::FromRawHandle;
+use std::os::windows::prelude::{FromRawHandle};
 use std::sync::mpsc::channel;
 use std::sync::{Arc, Mutex};
-use std::{ptr, thread, time};
+use std::{thread, time};
 use websocket::sync::{Server, Writer};
 use websocket::{ClientBuilder, OwnedMessage};
-use winapi::um::processthreadsapi::{OpenProcess};
-use winapi::um::consoleapi::{ GetConsoleMode, SetConsoleMode};
-use winapi::um::processenv::{GetStdHandle};
-use winapi::um::winbase::{INFINITE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE};
-use winapi::um::winnt::{ PROCESS_ALL_ACCESS};
-use winapi::um::synchapi::WaitForSingleObject;
 
-use crate::utils::{MAGIC_FLAG, makeword, splitword};
+use crate::conpty::{console, self};
+
+use crate::utils::{MAGIC_FLAG, makeword, splitword, get_stdout_handle, get_stdin_handle, handle_to_rawhandle};
 
 pub fn rconnect( addr : String , subprocess : String , fullargs : Vec<String>){
 
@@ -78,10 +74,12 @@ pub fn rconnect( addr : String , subprocess : String , fullargs : Vec<String>){
 	};
 
 	thread::spawn(move || {
-		let handle = unsafe { OpenProcess(PROCESS_ALL_ACCESS, 0, pid) };
+		let handle = unsafe { OpenProcess(windows::Win32::System::Threading::PROCESS_ALL_ACCESS, false, pid) };
 
-		if handle != ptr::null_mut() {
-			unsafe { WaitForSingleObject(handle, INFINITE)};
+		if handle.is_invalid() {
+			unsafe { WaitForSingleObject(handle, 0xffffffff)};
+		} else {
+			log::error!("OpenProcess error");
 		}
 		log::warn!("child process exit!");
 		std::process::exit(0);
@@ -254,11 +252,11 @@ pub fn rbind(port : String){
 	let slck_2 = slck_1.clone();
 	let slck_3 = slck_1.clone();
 	
-	let mut mode = 0_u32;
-	
-	let ret = unsafe { GetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE), &mut mode)};
+	let mut mode = windows::Win32::System::Console::CONSOLE_MODE::default();
+	let h = get_stdout_handle();
+	let ret = unsafe { GetConsoleMode(h, &mut mode)};
 
-	if ret == 0 {
+	if ret == false {
 		log::error!("get console mode faild!");
 		std::process::exit(0);
 	}
@@ -281,7 +279,8 @@ pub fn rbind(port : String){
 
 	thread::spawn(move || {
 
-		let mut fin = unsafe {File::from_raw_handle(GetStdHandle(STD_INPUT_HANDLE))};
+		let h = std::os::windows::prelude::RawHandle::from(handle_to_rawhandle(&get_stdin_handle()));
+		let mut fin = unsafe {File::from_raw_handle(h)};
 
 		loop{
 			
@@ -313,13 +312,13 @@ pub fn rbind(port : String){
 		let mut row = 0 ;
 		let mut col = 0;
 
-		let h = unsafe { GetStdHandle(STD_OUTPUT_HANDLE) };
+		let h = get_stdout_handle();
 		
 		loop {
-			let mut csbi: CONSOLE_SCREEN_BUFFER_INFO = unsafe { std::mem::zeroed() };
+			let mut csbi: windows::Win32::System::Console::CONSOLE_SCREEN_BUFFER_INFO = unsafe { std::mem::zeroed() };
 			let ret = unsafe { GetConsoleScreenBufferInfo( h  , &mut csbi)};
 
-			if ret == 0 {
+			if ret == false {
 				log::error!("get console size faild!");
 				unsafe {SetConsoleMode(h , mode)};
 				std::process::exit(0);
@@ -350,14 +349,19 @@ pub fn rbind(port : String){
 		
 	} );
 
-	let mut out = unsafe {File::from_raw_handle(GetStdHandle(STD_OUTPUT_HANDLE))};
+	let h = std::os::windows::prelude::RawHandle::from(handle_to_rawhandle(&get_stdout_handle()));
+
+	let mut out = unsafe {File::from_raw_handle(h)};
 
 	for message in receiver.incoming_messages() {
 		let message = match message {
 			Ok(p) => p,
 			Err(_) => {
 				log::warn!("client closed : [{}:{}]" ,ip , port );
-				unsafe {SetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE) , mode)};
+
+				let h = get_stdout_handle();
+
+				unsafe {SetConsoleMode(h , mode)};
 				std::process::exit(0);
 			},
 		};
@@ -365,7 +369,7 @@ pub fn rbind(port : String){
 		match message {
 			OwnedMessage::Close(_) => {
 				log::warn!("client closed : [{}:{}]" ,ip , port );
-				unsafe {SetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE) , mode)};
+				unsafe {SetConsoleMode(get_stdout_handle() , mode)};
 				std::process::exit(0);
 			},
 			OwnedMessage::Ping(ping) => {
@@ -419,11 +423,11 @@ pub fn connect( addr : String ){
 		Ok(p) => p
 	};
 
-	let mut mode = 0_u32;
+	let mut mode = windows::Win32::System::Console::CONSOLE_MODE::default();
 	
-	let ret = unsafe { GetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE), &mut mode)};
+	let ret = unsafe { GetConsoleMode(get_stdout_handle(), &mut mode)};
 
-	if ret == 0 {
+	if ret == false {
 		log::error!("get console mode faild!");
 		std::process::exit(0);
 	}
@@ -466,7 +470,7 @@ pub fn connect( addr : String ){
 			};
 			match message {
 				OwnedMessage::Close(_) => {
-					unsafe {SetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE) , mode)};
+					unsafe {SetConsoleMode(get_stdout_handle() , mode)};
 					std::process::exit(0);
 				},
 				OwnedMessage::Binary(_) => {
@@ -489,12 +493,12 @@ pub fn connect( addr : String ){
 		let mut row = 0 ;
 		let mut col = 0;
 
-		let h = unsafe { GetStdHandle(STD_OUTPUT_HANDLE) };
+		let h = get_stdout_handle();
 		loop {
 			let mut csbi: CONSOLE_SCREEN_BUFFER_INFO = unsafe { std::mem::zeroed() };
 			let ret = unsafe { GetConsoleScreenBufferInfo( h  , &mut csbi)};
 
-			if ret == 0 {
+			if ret == false {
 				log::error!("get console size faild!");
 				unsafe {SetConsoleMode(h , mode)};
 				std::process::exit(0);
@@ -526,9 +530,9 @@ pub fn connect( addr : String ){
 
 	let receive_loop = thread::spawn(move || {
 
-		let h = unsafe { GetStdHandle(STD_OUTPUT_HANDLE) };
+		let h = get_stdout_handle();
 
-		let mut out = unsafe {File::from_raw_handle(h)};
+		let mut out = unsafe {File::from_raw_handle(handle_to_rawhandle(&h))};
 
 		for message in receiver.incoming_messages() {
 			let message = match message {
@@ -572,9 +576,7 @@ pub fn connect( addr : String ){
 	});
 	
 	// first set terminal size
-	let h = unsafe { GetStdHandle(STD_INPUT_HANDLE) };
-
-	let mut input = unsafe {File::from_raw_handle(h)};
+	let mut input = unsafe {File::from_raw_handle(handle_to_rawhandle(&get_stdin_handle()))};
 
 	loop{
 		
@@ -629,11 +631,15 @@ pub fn bind(port : String , subprocess : String , fullargs : Vec<String>) {
 	};
 
 	thread::spawn(move || {
-		let handle = unsafe { OpenProcess(PROCESS_ALL_ACCESS, 0, pid) };
+		let handle = unsafe { OpenProcess(windows::Win32::System::Threading::PROCESS_ALL_ACCESS, false, pid) };
 
-		if handle != ptr::null_mut() {
-			unsafe { WaitForSingleObject(handle, INFINITE)};
+		if handle.is_invalid(){
+			log::error!("OpenProcess error");
+			std::process::exit(0);
 		}
+
+		unsafe { WaitForSingleObject(handle, 0xffffffff)};
+
 		log::warn!("child process exit!");
 		std::process::exit(0);
 

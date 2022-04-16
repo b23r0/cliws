@@ -3,6 +3,9 @@ use simple_logger::SimpleLogger;
 
 mod utils;
 
+#[cfg(target_os = "windows")]
+mod conpty;
+
 #[cfg(target_os = "linux")]
 mod xnix;
 #[cfg(target_os = "linux")]

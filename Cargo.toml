@@ -1,6 +1,6 @@
 [package]
 name = "cliws"
-version = "0.2.2"
+version = "0.3.0"
 authors = ["b23r0 <b23r0@foxmail.com>"]
 edition = "2021"
 description = "Lightweight interactive bind/reverse PTY shell with Windows&Linux support implementation by Rust."
@@ -21,10 +21,20 @@ ioctl-rs = "0.2"
 signal-hook = "0.3.10"
 #openssl-sys = "0.9.67"
 
-[target.'cfg(target_os = "windows")'.dependencies]
-ntapi = "0.3.6"
-winapi = { version = "0.3.9", features = ["namedpipeapi","synchapi"] }
-conpty = "0.3.0"
+[dependencies.windows]
+version = "0.29.0"
+features = [
+    "alloc",
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_Threading",
+    "Win32_System_Console",
+    "Win32_System_Pipes",
+    "Win32_System_SystemServices",
+    "Win32_System_WindowsProgramming",
+    "Win32_System_IO",
+    "Win32_Storage_FileSystem",
+]
 
 [profile.release]
 # strip = true  # Automatically strip symbols from the binary.
