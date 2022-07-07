@@ -611,6 +611,45 @@ pub fn connect( addr : String ){
 
 pub fn bind(port : String , subprocess : String , fullargs : Vec<String>) {
 
+	log::info!("listen to: [{}:{}]" ,"0.0.0.0" , port );
+	let listen_addr = format!("{}:{}", "0.0.0.0", port);
+
+	let mut server = match Server::bind(listen_addr) {
+		Err(_) => {
+			log::error!("bind [0.0.0.0:{}] faild" , port);
+			return;
+		}, 
+		Ok(p) => p
+	};
+
+	let request = match server.accept(){
+		Err(e) => {
+			log::error!("error : {}" , e.error);
+			return;
+		},
+		Ok(p) => p
+	};
+	let client = match request.accept(){
+		Ok(p) => p,
+		Err(e) => {
+			log::error!("error : {}" , e.1);
+			return;
+		},
+	};
+
+	let addr = match client.peer_addr(){
+		Ok(p) => p,
+		Err(e) => {
+			log::error!("error : {}" , e);
+			return;
+		},
+	};
+
+	let ip = addr.ip();
+	let port = addr.port();
+
+	log::info!("accept from : [{}:{}]" ,ip , port );
+
 	let full_cmd = format!("{} {}" ,subprocess , fullargs.join(" ").as_str());
 
 	let proc = conpty::spawn(full_cmd).unwrap();
@@ -691,45 +730,6 @@ pub fn bind(port : String , subprocess : String , fullargs : Vec<String>) {
 		}
 
 	});
-
-	log::info!("listen to: [{}:{}]" ,"0.0.0.0" , port );
-	let listen_addr = format!("{}:{}", "0.0.0.0", port);
-
-	let mut server = match Server::bind(listen_addr) {
-		Err(_) => {
-			log::error!("bind [0.0.0.0:{}] faild" , port);
-			return;
-		}, 
-		Ok(p) => p
-	};
-
-	let request = match server.accept(){
-		Err(e) => {
-			log::error!("error : {}" , e.error);
-			return;
-		},
-		Ok(p) => p
-	};
-	let client = match request.accept(){
-		Ok(p) => p,
-		Err(e) => {
-			log::error!("error : {}" , e.1);
-			return;
-		},
-	};
-
-	let addr = match client.peer_addr(){
-		Ok(p) => p,
-		Err(e) => {
-			log::error!("error : {}" , e);
-			return;
-		},
-	};
-
-	let ip = addr.ip();
-	let port = addr.port();
-
-	log::info!("accept from : [{}:{}]" ,ip , port );
 
 	let (mut receiver, mut sender) = client.split().unwrap();
 	{
