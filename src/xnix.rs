@@ -130,7 +130,7 @@ pub fn rconnect( addr : String , subprocess : String , fullargs : Vec<String>){
 				break;
 			}
 
-			let msg = OwnedMessage::Binary(buf.to_vec());
+			let msg = OwnedMessage::Binary(buf[..size].to_vec());
 			match tx.send(msg) {
 				Ok(()) => (),
 				Err(_) => {
