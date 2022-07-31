@@ -1,9 +1,9 @@
 [package]
 name = "cliws"
-version = "0.3.1"
+version = "0.4.0"
 authors = ["b23r0 <b23r0@foxmail.com>"]
 edition = "2021"
-description = "Lightweight interactive bind/reverse PTY shell with Windows&Linux support implementation by Rust."
+description = "Lightweight interactive bind/reverse PTY shell implementation by Rust."
 repository = "https://github.com/b23r0/Cliws"
 readme = "README.md"
 license = "MIT"
