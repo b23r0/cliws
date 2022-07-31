@@ -14,7 +14,7 @@ websocket = "0.26.2"
 simple_logger = "2.1.0"
 log = "0.4.14"
 
-[target.'cfg(target_os = "linux")'.dependencies]
+[target.'cfg(not(target_os = "windows"))'.dependencies]
 nix = "0.23.0"
 atty = "0.2"
 ioctl-rs = "0.2"

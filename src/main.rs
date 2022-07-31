@@ -6,9 +6,9 @@ mod utils;
 #[cfg(target_os = "windows")]
 mod conpty;
 
-#[cfg(target_os = "linux")]
+#[cfg(not(target_os = "windows"))]
 mod xnix;
-#[cfg(target_os = "linux")]
+#[cfg(not(target_os = "windows"))]
 use xnix::{bind , connect ,rbind ,rconnect };
 #[cfg(target_os = "windows")]
 mod win;

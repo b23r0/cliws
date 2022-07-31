@@ -1,5 +1,5 @@
 # Cliws [![Build Status](https://img.shields.io/github/workflow/status/b23r0/cliws/Rust)](https://app.travis-ci.com/b23r0/Cliws) [![ChatOnDiscord](https://img.shields.io/badge/chat-on%20discord-blue)](https://discord.gg/ZKtYMvDFN4) [![LastCommit](https://img.shields.io/github/last-commit/b23r0/cliws)](https://github.com/b23r0/Cliws/) [![Crate](https://img.shields.io/crates/v/cliws)](https://crates.io/crates/cliws)
-Lightweight interactive bind/reverse PTY shell with Windows&Linux support implementation by Rust.
+Lightweight interactive bind/reverse PTY shell implementation by Rust.
 
 # Features
 
@@ -7,7 +7,7 @@ Lightweight interactive bind/reverse PTY shell with Windows&Linux support implem
 * Full pty support: VIM, SSH, readline, Ctrl+X
 * Auto set terminal window size.
 * Reverse connection / Bind port
-* Support Win10+(Windows Server 2019+) & Linux
+* Support Win10+(Windows Server 2019+) & Linux & BSD & OSX
 
 # Build & Run
 
