@@ -9,6 +9,16 @@ readme = "README.md"
 license = "MIT"
 keywords = ["shell", "pentest"]
 
+[lib]
+name = "cliws"
+path = "src/lib.rs"
+crate-type = ["cdylib", "lib"]
+
+[[bin]]
+name = "cliws"
+path = "src/main.rs"
+
+
 [dependencies]
 websocket = "0.26.2"
 simple_logger = "2.1.0"
@@ -37,7 +47,7 @@ features = [
 ]
 
 [profile.release]
-# strip = true  # Automatically strip symbols from the binary.
+strip = true  # Automatically strip symbols from the binary.
 opt-level = "z"  # Optimize for size.
 lto = true
 codegen-units = 1
